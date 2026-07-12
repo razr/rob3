@@ -4,7 +4,7 @@ This directory contains the original, scanned reference manuals and operational 
 
 ## Available Documents
 
-*   **[TBPS.pdf](docs/manuals/TBPS.pdf)** — User's manual for ROB 3i.
+*   **[TBPS.pdf](TBPS.pdf)** — User's manual for ROB 3i.
 
 ## Quick Hardware Reference (From Manuals)
 
