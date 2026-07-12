@@ -4,7 +4,7 @@ This directory contains the original binary image extracted from the ROB3’s lo
 
 ## Binary Specifications
 
-*   **Source File:** `M2764A@DIP28.BIN`
+*   **Source File:** [`M2764A@DIP28.BIN`](M2764A@DIP28.BIN)
 *   **Target Memory Chip:** STMicroelectronics / Intel `M2764A`
 *   **Package Layout:** Dual-in-Line 28-Pin (DIP28) Ceramic Window Package
 *   **Memory Type:** Non-Volatile UV-Erasable EPROM
