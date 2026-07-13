@@ -273,6 +273,19 @@ Port C  = 0x00  → All motor outputs off
 
 ## Axis Control Architecture
 
+### Axis Mechanical Limits (from documentation)
+
+| Axis | Joint | Symbol | Range | Resolution |
+|------|-------|--------|-------|------------|
+| 0 | Base rotation | q1 | +80° to −80° | 0–255 (8-bit) |
+| 1 | Shoulder | q2 | +70° to −30° | 0–255 (8-bit) |
+| 2 | Elbow | q3 | 0° to −100° | 0–255 (8-bit) |
+| 3 | Wrist | q4 | +100° to −100° | 0–255 (8-bit) |
+| 4 | Wrist roll | q5 | +100° to −100° | 0–255 (8-bit) |
+| 5 | Gripper | — | 0 to 60 mm | 0–255 (8-bit) |
+
+Note: Firmware uses zero-based numbering. Original robot documentation uses one-based.
+
 ### Axis State Machine (External Interrupt 1 ISR)
 The axis controller runs in the External Interrupt 1 handler, cycling through all 6 axes in a round-robin fashion.
 

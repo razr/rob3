@@ -32,6 +32,18 @@
 4. **Program interpreter** (executes stored motion sequences from ext RAM)
 5. **Motion executor** (manages axis trajectories with accel/decel profiles)
 
+### Axis Mechanical Limits (from updated docs)
+| Axis | Joint | Symbol | Range | Resolution |
+|------|-------|--------|-------|------------|
+| 0 | Base rotation | q1 | +80° to −80° | 0–255 |
+| 1 | Shoulder | q2 | +70° to −30° | 0–255 |
+| 2 | Elbow | q3 | 0° to −100° | 0–255 |
+| 3 | Wrist | q4 | +100° to −100° | 0–255 |
+| 4 | Wrist roll | q5 | +100° to −100° | 0–255 |
+| 5 | Gripper | — | 0–60 mm | 0–255 |
+
+All positions are 8-bit. Firmware uses zero-based numbering.
+
 ### Memory Map Summary
 - 0x00–0x07: Register bank 0 (main)
 - 0x08–0x0F: Register bank 1 (ISRs)

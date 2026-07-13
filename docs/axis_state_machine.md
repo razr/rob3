@@ -6,14 +6,17 @@ The ROB3 robot has 6 axes, each controlled by an independent state machine that 
 
 ## Axis Numbering
 
-| Index | Axis | Mechanical Function |
-|-------|------|-------------------|
-| 0 | Base | Base rotation (θ1) |
-| 1 | Shoulder | Shoulder elevation (θ2) |
-| 2 | Elbow | Elbow bend (θ3) |
-| 3 | Wrist 1 | Wrist rotation (θ4) |
-| 4 | Wrist 2 | Wrist pitch (θ5) |
-| 5 | Gripper | Gripper open/close (θ6) |
+| Index | Axis | Mechanical Function | Symbol | Range |
+|-------|------|-------------------|--------|-------|
+| 0 | Base | Base rotation | q1 | +80° to −80° |
+| 1 | Shoulder | Shoulder elevation | q2 | +70° to −30° |
+| 2 | Elbow | Elbow bend | q3 | 0° to −100° |
+| 3 | Wrist | Wrist pitch | q4 | +100° to −100° |
+| 4 | Wrist roll | Wrist rotation | q5 | +100° to −100° |
+| 5 | Gripper | Gripper open/close | — | 0–60 mm |
+
+All positions are 8-bit values (0–255).
+Firmware uses zero-based numbering; original robot documentation uses one-based.
 
 ## Data Structures Per Axis
 

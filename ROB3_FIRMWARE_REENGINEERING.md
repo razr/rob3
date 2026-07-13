@@ -95,9 +95,27 @@ Axis numbering used by the original firmware:
 | Axis 0 | Base rotation |
 | Axis 1 | Shoulder |
 | Axis 2 | Elbow |
-| Axis 3 | Wrist 1 |
-| Axis 4 | Wrist 2 |
+| Axis 3 | Wrist |
+| Axis 4 | Wrist roll |
 | Axis 5 | Gripper |
+
+### ROB3 Axis Mechanical Limits
+
+The ROB3 robot uses five rotational joints plus an electric gripper.
+
+| Firmware Axis | Joint | Symbol | Motion Range | Resolution |
+|---|---|---|---|---|
+| Axis 0 | Base rotation | q1 | +80° ... 0° ... -80° | 0...255 |
+| Axis 1 | Shoulder | q2 | +70° ... 0° ... -30° | 0...255 |
+| Axis 2 | Elbow | q3 | 0° ... -100° | 0...255 |
+| Axis 3 | Wrist | q4 | +100° ... 0° ... -100° | 0...255 |
+| Axis 4 | Wrist roll | q5 | +100° ... 0° ... -100° | 0...255 |
+| Axis 5 | Gripper | — | 0 ... 60 mm | 0...255 |
+
+Note:
+- The firmware uses zero-based axis numbering.
+- The original robot documentation uses one-based axis numbering.
+- Each axis position is represented by an 8-bit value (0...255).
 
 The reverse engineering process must identify how the firmware maps these logical axes to the physical motor control hardware.
 
@@ -133,12 +151,12 @@ Example:
 The firmware should model six independent axis controllers:
 
 ```c
-#define AXIS_BASE      0
-#define AXIS_SHOULDER  1
-#define AXIS_ELBOW     2
-#define AXIS_WRIST_1   3
-#define AXIS_WRIST_2   4
-#define AXIS_GRIPPER   5
+#define AXIS_BASE       0
+#define AXIS_SHOULDER   1
+#define AXIS_ELBOW      2
+#define AXIS_WRIST      3
+#define AXIS_WRIST_ROLL 4
+#define AXIS_GRIPPER    5
 ```
 
 ### Input/Output Handling
