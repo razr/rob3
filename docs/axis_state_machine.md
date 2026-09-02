@@ -6,14 +6,14 @@ The ROB3 robot has 6 axes, each controlled by an independent state machine that 
 
 ## Axis Numbering
 
-| Index | Axis | Mechanical Function | Symbol | Range |
-|-------|------|-------------------|--------|-------|
-| 0 | Base | Base rotation | q1 | +80° to −80° |
-| 1 | Shoulder | Shoulder elevation | q2 | +70° to −30° |
-| 2 | Elbow | Elbow bend | q3 | 0° to −100° |
-| 3 | Wrist | Wrist pitch | q4 | +100° to −100° |
-| 4 | Wrist roll | Wrist rotation | q5 | +100° to −100° |
-| 5 | Gripper | Gripper open/close | — | 0–60 mm |
+| Index | Axis       | Mechanical Function | Symbol | Range          |
+|-------|------------|---------------------|--------|----------------|
+| 0     | Base       | Base rotation       | q1     | +80° to −80°   |
+| 1     | Shoulder   | Shoulder elevation  | q2     | +70° to −30°   |
+| 2     | Elbow      | Elbow bend          | q3     | 0° to −100°    |
+| 3     | Wrist      | Wrist pitch         | q4     | +100° to −100° |
+| 4     | Wrist roll | Wrist rotation      | q5     | +100° to −100° |
+| 5     | Gripper    | Gripper open/close  | —      | 0–60 mm        |
 
 All positions are 8-bit values (0–255).
 Firmware uses zero-based numbering; original robot documentation uses one-based.
@@ -22,28 +22,28 @@ Firmware uses zero-based numbering; original robot documentation uses one-based.
 
 Each axis N (0-5) uses the following RAM locations:
 
-| Address | Variable | Description |
-|---------|----------|-------------|
-| 0x40+N | target | Target position (set by command/program) |
-| 0x48+N | speed | Step rate / speed parameter |
-| 0x50+N | current | Current position (host-visible) |
-| 0x58+N | feedback | Raw feedback from hardware |
-| 0x70+N | decel | Deceleration distance / profile |
-| 0x78+N | state | ISR working state |
+| Address | Variable | Description                              |
+|---------|----------|------------------------------------------|
+| 0x40+N  | target   | Target position (set by command/program) |
+| 0x48+N  | speed    | Step rate / speed parameter              |
+| 0x50+N  | current  | Current position (host-visible)          |
+| 0x58+N  | feedback | Raw feedback from hardware               |
+| 0x70+N  | decel    | Deceleration distance / profile          |
+| 0x78+N  | state    | ISR working state                        |
 
 ## Bit Masks (per axis)
 
 The firmware uses rotating bit masks to identify individual axes:
 
-| Axis | Mask Bit | Value |
-|------|----------|-------|
-| 0 | bit 0 | 0x01 |
-| 1 | bit 1 | 0x02 |
-| 2 | bit 2 | 0x04 |
-| 3 | bit 3 | 0x08 |
-| 4 | bit 4 | 0x10 |
-| 5 | bit 5 | 0x20 |
-| (all) | bits 0-5 | 0x3F |
+| Axis  | Mask Bit | Value |
+|-------|----------|-------|
+| 0     | bit 0    | 0x01  |
+| 1     | bit 1    | 0x02  |
+| 2     | bit 2    | 0x04  |
+| 3     | bit 3    | 0x08  |
+| 4     | bit 4    | 0x10  |
+| 5     | bit 5    | 0x20  |
+| (all) | bits 0-5 | 0x3F  |
 
 ### Axis Flag Registers
 
@@ -58,33 +58,33 @@ The firmware uses rotating bit masks to identify individual axes:
 ## State Machine (per axis, in ISR_EXT1)
 
 ```
-┌──────────────────────────────────────────┐
-│         ISR Entry (jump_00BF)            │
-│  Save PSW, select bank 1                 │
+┌─────────────────────────────────────────┐
+│         ISR Entry (jump_00BF)           │
+│  Save PSW, select bank 1                │
 │  Get current axis from R0 (0x48-0x4D)   │
 │  Derive workspace pointer: R0 + 0x10    │
-└────────────────────┬─────────────────────┘
+└────────────────────┬────────────────────┘
                      │
                      ▼
-┌──────────────────────────────────────────┐
-│    Check if axis is active (22h.7)       │
-│    OR check if timer update (22h.6)      │
-├──────────YES───────┬─────────NO──────────┤
-│                    │                      │
-▼                    │                      ▼
-┌──────────────┐     │     ┌──────────────────────┐
-│ Read feedback│     │     │ Read motor command    │
-│ from DPH=59 │     │     │ from lookup table     │
-│ Store @R1    │     │     │ (DPH=0x58 indexed)   │
-└──────┬───────┘     │     └──────────┬───────────┘
+┌─────────────────────────────────────────┐
+│    Check if axis is active (22h.7)      │
+│    OR check if timer update (22h.6)     │
+└──────YES───────────┬─────────────NO─────┘
+       │             │              │
+       ▼             │              ▼
+┌───────────────┐    │     ┌─────────────────────┐
+│ Read feedback │    │     │ Read motor command  │
+│ from DPH=59   │    │     │ from lookup table   │
+│ Store @R1     │    │     │ (DPH=0x58 indexed)  │
+└──────┬────────┘    │     └──────────┬──────────┘
        │             │                │
        ▼             │                ▼
-┌──────────────────┐ │  ┌─────────────────────────┐
+┌──────────────────┐ │  ┌──────────────────────────┐
 │ Calculate error  │ │  │ Apply step table         │
 │ target - current │ │  │ Compute phase output     │
 │ Apply speed      │ │  │ Update motor shadow regs │
-└──────┬───────────┘ │  │ (0x4E, 0x4F)            │
-       │             │  └─────────────┬───────────┘
+└──────┬───────────┘ │  │ (0x4E, 0x4F)             │
+       │             │  └─────────────┬────────────┘
        ▼             │                │
 ┌──────────────────┐ │                │
 │ Compute step     │ │                │
@@ -96,16 +96,16 @@ The firmware uses rotating bit masks to identify individual axes:
        ▼             │                ▼
 ┌──────────────────────────────────────────┐
 │         Update output registers          │
-│  Write Port A shadow (0x4E) for axes 0-3│
-│  Write Port C shadow (0x4F) for axes 4-5│
+│  Write Port A shadow (0x4E) for axes 0-3 │
+│  Write Port C shadow (0x4F) for axes 4-5 │
 └────────────────────┬─────────────────────┘
                      │
                      ▼
 ┌──────────────────────────────────────────┐
 │         Advance to next axis             │
 │  Rotate 22h left                         │
-│  R0 = next axis workspace               │
-│  Write axis select to DPH=0x58          │
+│  R0 = next axis workspace                │
+│  Write axis select to DPH=0x58           │
 │  Restore PSW, RETI                       │
 └──────────────────────────────────────────┘
 ```
