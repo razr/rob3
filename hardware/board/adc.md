@@ -2,7 +2,15 @@
 
 The ADC is the board's analog sampling stage. It reads the sensor and potentiometer inputs and forwards converted values to the 8031 through the bus and interrupt logic.
 
+## Part identification
+
+The chip markings were scratched off by the designer, so the part is identified from the **ringed-out board connections** (continuity-verified) plus the firmware behaviour. The signal set — 8 multiplexed analog inputs, an 8-bit tri-state data bus, and the control lines `START`, `ALE`, `EOC`, `OUTPUT ENABLE`, external `CLOCK`, and channel-address inputs `ADD A/B/C` — is the unique fingerprint of the **ADC0808 / ADC0809** family (8-bit successive-approximation ADC with on-chip 8-channel multiplexer).
+
+Because `VREF(+)` is tied straight to the +5 V rail (ratiometric, no precision reference), the looser-reference **ADC0809** is the most likely populated part; the ADC0808 is pin- and function-identical and would drop in.
+
 ## Pinout
+
+The functional labels below are derived from the ringed-out net list, not from chip markings.
 
 ```text
                             +----U----+
@@ -10,18 +18,24 @@ The ADC is the board's analog sampling stage. It reads the sensor and potentiome
             Analog input 5 ─|2      27|─ Analog input 2
             Analog input 6 ─┤3      26├─ Analog input 1
             Analog input 7 ─┤4      25├─ Analog input 0
-                           ─|5      24|─ 
-                           ─|6      23|─ 
+                 VCC (+5V) ─|5      24|─ ADD C  (strapped GND)
+                       GND ─|6      23|─ ADD B  (strapped VCC)
            D7 / data bit 7 ─┤7      22├─ ALE
            D6 / data bit 6 ─┤8      21├─ OUTPUT ENABLE
            D5 / data bit 5 ─┤9      20├─ ADD A
            D4 / data bit 4 ─┤10     19├─ START
-           D3 / data bit 3 ─┤11     18├─ 
+           D3 / data bit 3 ─┤11     18├─ VCC (+5V)
            D2 / data bit 2 ─┤12     17├─ CLOCK
            D1 / data bit 1 ─┤13     16├─ EOC
-           D0 / data bit 0 ─┤14     15├─ 
+           D0 / data bit 0 ─┤14     15├─ VREF(+) / VCC (+5V)
                             +---------+
 ```
+
+> Note: the exact pin *positions* differ from the National Semiconductor datasheet
+> silkscreen ordering because this mapping follows the physically-ringed nets on
+> this board, not the canonical package drawing. The functional grouping
+> (8 analog in / 8 data out / START / ALE / EOC / OE / CLOCK / ADD A-C) is what
+> identifies the part.
 
 ## Board connections
 
@@ -49,6 +63,56 @@ The ADC is the board's analog sampling stage. It reads the sensor and potentiome
 - The ADC is tied to the sensor network and multiplexed channel logic.
 - ADC pin 15 (`VREF(+)`) is tied to VCC (+5V), the same rail used by the L293 enable inputs.
 - The conversion and channel-switch behavior is managed by the 8031 interrupt routine and the decoder bus.
+
+## Firmware confirmation (ADC0808/0809)
+
+The ADC0808/0809 identification is confirmed by the firmware in
+`firmware/src/main.asm`. Every control line ringed out on the board has a
+matching software behaviour:
+
+- **EOC → /INT1 (pin 16 → 8031 pin 13).** The 8031 interrupt vector at `0013h`
+  (External Interrupt 1) jumps to `jump_00BF`. Byte-offset check in
+  `main.asm`: `org 01h` places the INT0 `ljmp` at `0003h → jump_003F`, the
+  Timer-0 `ljmp` at `000Bh → jump_007F`, and the next `ljmp jump_00BF` at
+  `0013h`. So the ADC's end-of-conversion pulse is what fires the handler —
+  exactly how an ADC0809 signals "data ready".
+
+- **Channel step + START via memory-mapped address latch (pins 20/22/19).**
+  The `jump_0278` tail of the /INT1 handler advances the channel and launches
+  the next conversion:
+
+  ```asm
+  jump_0278:
+      mov A, 22h      ; current channel bit-mask
+      rl A            ; rotate to next channel pattern
+      mov 22h, A
+      mov A, R0
+      inc A           ; next channel index
+      anl A, #07h     ; keep it in 0..7  (three ADD lines' worth)
+      mov 83h, #58h   ; DPH = 58h  -> external address 5800h
+      movx @DPTR, A   ; write channel addr: latches ADD lines (ALE) and
+                      ; pulses /WR = START on the ADC
+      orl A, #48h
+      mov R0, A
+      mov A, R2
+      pop 0D0h
+      reti
+  ```
+
+  The `movx @DPTR,A` to `5800h` maps through `74LS138` (pin 22 = ALE / channel
+  latch, decoder output) and pulses `/WR` (8031 pin 16 → ADC pin 19 = START).
+  This is the classic ADC0809 "latch channel address, then START" sequence.
+
+- **Data read via OUTPUT ENABLE (pin 21 → 8255 pin 5 /RD).** Converted bytes
+  are read back through the 8255 data port and stored in the internal RAM
+  telemetry block (`50h`-`55h`), matching the 8-bit tri-state data bus
+  (D0-D7 → 8255 pin 34..27).
+
+- **`anl A,#07h` proves an 8-channel device.** The firmware masks the channel
+  index to `0..7`, i.e. it addresses 8 mux channels — the exact channel count
+  of the ADC0808/0809. (On this board only `ADD A` is bused to the CPU via
+  A8/8255; `ADD B`/`ADD C` are strapped, so the physically-reachable channels
+  are a subset, but the code is written for the full 3-bit `0..7` range.)
 
 ## Reverse-engineering relevance
 

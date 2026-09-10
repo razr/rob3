@@ -29,18 +29,18 @@ The M2764A EPROM stores the board's permanent program code. It is the nonvolatil
                                +---U---+
                     VCC (+5V) ─┤ 1   28 ├─ VCC (+5V)
                   8031 pin 25 ─┤ 2   27 ├─ VCC (+5V)
-               74HC573 pin 19 ─┤ 3   26 ├─ 8031 pin 26
-                74HC573 pin 2 ─┤ 4   25 ├─ 8031 pin 21
-               74HC573 pin 16 ─┤ 5   24 ├─ 8031 pin 22
-                74HC573 pin 5 ─┤ 6   23 ├─ 8031 pin 24, 74LS138 pin 2
-               74HC573 pin 15 ─┤ 7   22 ├─ 74HC14 pin 8
-                74HC573 pin 6 ─┤ 8   21 ├─ 8031 pin 23
-                74HC573 pin 9 ─┤ 9   20 ├─ 74LS138 pin 12
-               74HC573 pin 12 ─┤10   19 ├─ 8031 pin 32, 74HC573 pin 18
-  8031 pin 39, 74HC573 pin 13 ─┤11   18 ├─ 8031 pin 33
-   8031 pin 38, 74HC573 pin 8 ─┤12   17 ├─ 8031 pin 34
-   8031 pin 37, 74HC573 pin 7 ─┤13   16 ├─ 8031 pin 35
-                          GND ─┤14   15 ├─ 8031 pin 36, 74HC573 pin 14
+               74HC373 pin 19 ─┤ 3   26 ├─ 8031 pin 26
+                74HC373 pin 2 ─┤ 4   25 ├─ 8031 pin 21
+               74HC373 pin 16 ─┤ 5   24 ├─ 8031 pin 22
+                74HC373 pin 5 ─┤ 6   23 ├─ 8031 pin 24, 74LS138 pin 2
+               74HC373 pin 15 ─┤ 7   22 ├─ 74HC14 pin 8
+                74HC373 pin 6 ─┤ 8   21 ├─ 8031 pin 23
+                74HC373 pin 9 ─┤ 9   20 ├─ 74LS138 pin 12
+               74HC373 pin 12 ─┤10   19 ├─ 8031 pin 32, 74HC373 pin 18
+  8031 pin 39, 74HC373 pin 13 ─┤11   18 ├─ 8031 pin 33
+   8031 pin 38, 74HC373 pin 8 ─┤12   17 ├─ 8031 pin 34
+   8031 pin 37, 74HC373 pin 7 ─┤13   16 ├─ 8031 pin 35
+                          GND ─┤14   15 ├─ 8031 pin 36, 74HC373 pin 14
                                +--------+
 ```
 
