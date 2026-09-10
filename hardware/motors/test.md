@@ -1,6 +1,6 @@
 # Motor Test
 
-## L293N
+## L293 (L293D) driver pinout
 
 ```txt
                                  ---u---

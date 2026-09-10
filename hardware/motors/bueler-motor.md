@@ -1,4 +1,4 @@
-# DC Motor
+# Bühler DC Motor
 
 ```
 Motor SpecificationsManufacturer: Bühler (Nürnberg, W.-Germany / Raleigh, N.C., USA)
@@ -47,7 +47,7 @@ This aligns perfectly with the vintage of the original ROB3 educational robot ar
 #### 1. The Inline Guard (Diode & Capacitor Parallel on Line 1)
 Because the **1N4007 Diode** and the **1R5 Capacitor** are wired side-by-side right on the main input line, they act like a specialized filter checkpoint before electricity even enters the top terminal:
 * **The 1N4007 Diode** acts as a heavy-duty check valve [1N4007 Specification Sheet]. It forces the incoming 6V driving power to flow forward cleanly into the motor, but instantly slams shut if the motor tries to kick a high-voltage inductive spike backward up that specific line [1N4007 Specification Sheet].
-* **The 1R5 (1.5 pF) Capacitor** sits right next to it to handle the radio noise. While the diode handles the raw power, this tiny capacitor catches the ultra-high-frequency "fuzz" caused by the internal motor brushes and dissolves it right at the terminal so it cannot travel back up into the robot's ribbon cables.
+* **The 1R5 Capacitor** sits right next to it to handle the radio noise. (The `1R5` marking nominally reads 1.5; the unit is uncertain from the marking alone — for brush noise suppression a value in the nF range is typical rather than pF. **[value tentative — verify on the physical part]**) While the diode handles the raw power, this capacitor catches the ultra-high-frequency "fuzz" caused by the internal motor brushes and dissolves it right at the terminal so it cannot travel back up into the robot's ribbon cables.
 
 #### 2. The Line-to-Line Shield (The Red GE 2221 Varistor)
 Because the **Red Varistor** bridges both motor lines directly, it acts as a global safety net for the entire joint:
@@ -68,19 +68,22 @@ Here's a simplified ASCII block diagram.
                    +----------->|    8255 PPI     |
                                 | (3 ports x 8bit)|
                                 +---+--+--+---+---+
-                                    |  |  |   |
-                    Port A --------+  |  |   +--> Enable Lines (PWM or tied High)
-                    Port B -----------+  |
-                    Port C -------------+
+                                    |  |      |
+                    Port A --------+  |      +--> Port C -> L293 #3 direction
+                    (L293 #1,#2)      |
+                    Port B -----------+--> DB25 digital I/O (via 74LS244), NOT motors
                                     |
         +--------------------------+---------------------------+
         |                          |                           |
   +-----+----+              +------+-----+             +-------+-----+
-  |  L293D #1 |             |  L293D #2  |             |  L293D #3   |
+  |  L293 #1  |             |  L293 #2   |             |  L293 #3    |
   |  (2 motors)             |  (2 motors)|             |  (2 motors) |
+  |  EN = VCC |             |  EN = VCC  |             |  EN = VCC   |
   +----+-----+              +-----+-----+             +------+------+
        |                          |                          |
    Motor 1,2                  Motor 3,4                  Motor 5,6
+
+  (A 4th L293 footprint exists on the PCB but is NOT soldered / unpopulated.)
 ```
 
 ### Why the ROB3 Uses Two Base Motors
@@ -101,66 +104,30 @@ The motor on the left does not move Joint 2 directly from that spot. Instead, it
 Notes:
 
 - Intel 8031 connects to 8255 via data/address/control bus.
-- Intel 8255 outputs 24 lines over Port A, B, C to control L293Ds.
+- Intel 8255 drives the L293 direction inputs over Port A and Port C.
 
-Each L293D gets:
-- 4 inputs from 8255 (2 per motor for direction)
-- Enable pins can be controlled from 8255 or tied high
-- All 8 motors can be driven simultaneously.
+On the ROB3 board there are **three populated L293s** (6 motors). A fourth
+L293 footprint (`#4`) exists on the PCB but is **not soldered** — it is an
+unpopulated position, so motors 7 & 8 do not exist. The verified 8255 → L293
+mapping (see `../board/8255.md` and `../board/L293.md`) is:
+
+- **Port A (PA0–PA7)** → direction inputs of **L293 #1 and #2** (motors 1–4).
+- **Port C (PC4–PC7)** → direction inputs of **L293 #3** (motors 5–6).
+- **Enable pins (1,2EN / 3,4EN)** are **tied to VCC (+5V)** on each populated
+  L293 — they are not PWM-driven; speed is done in firmware by pulse timing.
+- **Port B** does **not** drive motors — it is the general digital I/O port,
+  buffered to the DB25 connector through the 74LS244 (see `../connectors/db25.md`).
 
 ```ascii
-         +--------------------+
-         |     8031 MCU       |
-         +--------------------+
-                |||| Data/Address/Control
-                VV
-         +--------------------+
-         |     8255 PPI       |
-         |--------------------|
-         | Port A: PA0–PA7    | --> L293D #1, #2 inputs
-         | Port B: PB0–PB7    | --> L293D #3, #4 inputs
-         | Port C: PC0–PC3    | --> EN1/EN2 of each L293D
-         |        PC4–PC7     | --> (unused or general I/O)
-         +--------------------+
-
-Now to each motor driver:
-
-    L293D #1 (Motor 1 & 2)
-    -----------------------
-    IN1  <- PA0      (Motor 1 direction A)
-    IN2  <- PA1      (Motor 1 direction B)
-    IN3  <- PA2      (Motor 2 direction A)
-    IN4  <- PA3      (Motor 2 direction B)
-    EN1  <- PC0      (PWM or logic high)
-    EN2  <- PC0      (can be tied together if same PWM)
-    
-    L293D #2 (Motor 3 & 4)
-    -----------------------
-    IN1  <- PA4
-    IN2  <- PA5
-    IN3  <- PA6
-    IN4  <- PA7
-    EN1  <- PC1
-    EN2  <- PC1
-
-    L293D #3 (Motor 5 & 6)
-    -----------------------
-    IN1  <- PB0
-    IN2  <- PB1
-    IN3  <- PB2
-    IN4  <- PB3
-    EN1  <- PC2
-    EN2  <- PC2
-
-    L293D #4 (Motor 7 & 8)
-    -----------------------
-    IN1  <- PB4
-    IN2  <- PB5
-    IN3  <- PB6
-    IN4  <- PB7
-    EN1  <- PC3
-    EN2  <- PC3
+    L293 #1 (Motors 1 & 2)  <- 8255 Port A (PA4/PA5/PA6/PA7), EN = VCC
+    L293 #2 (Motors 3 & 4)  <- 8255 Port A (PA0/PA1/PA2/PA3), EN = VCC
+    L293 #3 (Motors 5 & 6)  <- 8255 Port C (PC4/PC5/PC6/PC7), EN = VCC
+    L293 #4 (NOT POPULATED) -- footprint present on PCB, not soldered
 ```
+
+> For the exact 8255-pin ↔ L293-pin wiring per motor, see the reciprocal tables
+> in `../board/L293.md` and `../board/8255.md`. The mapping above is by port; the
+> board docs give the pin-level detail.
 
 ## References
 
