@@ -5,6 +5,13 @@ This project recreates the interface of a vintage 1985 Industrial Teachbox using
 The original host controller interface utilizes a T74LS138B1 3-to-8 line decoder combined with passive resistor pull-ups on the mainboard to drive a 5x5 scanning button matrix and multiplexed indicator LEDs over a standard DB25 connector.
 By leveraging the Arduino's internal INPUT_PULLUP resistors, this setup interfaces safely with modern hardware without needing the original mainboard's 10kΩ/100kΩ resistor arrays.
 
+> **Runnable project:** the buildable sketches and host script live in
+> [`arduino/`](arduino/) — `arduino/led_test/led_test.ino`,
+> `arduino/keypad_test/keypad_test.ino`, and `arduino/host/monitor.py`. See
+> [`arduino/README.md`](arduino/README.md) for build/upload/run instructions
+> (arduino-cli or the Arduino IDE). The listings in this document are a
+> narrative walkthrough; treat the files under `arduino/` as authoritative.
+
 ## 🛠️ Hardware Requirements
 
 - ELEGOO UNO R3 (or any standard Arduino Uno R3)
