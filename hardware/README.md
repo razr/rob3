@@ -1,39 +1,107 @@
-```mermaid
-flowchart LR
-    subgraph Processing & Memory
-        MCU[8031 Microcontroller]
-        Latch[74HC573 Latch]
-        EPROM[2764 EPROM]
-    end
+# Hardware
 
-    subgraph Motor Drive Stage
-        Driver[L293D Motor Driver]
-        M1[DC Motor 1]
-        M2[DC Motor 2]
-        Pwr[(External Motor Power)]
-    end
+## [Motors and potentiometers](motors/README.md)
 
-    %% 8031 to Latch and EPROM Connections
-    MCU ---> |"AD0-AD7 (Multiplexed)"| Latch
-    MCU ---> |"ALE (Latch Enable)"| Latch
-    Latch ---> |"A0-A7 (Lower Addr)"| EPROM
-    MCU ---> |"A8-A15 (Upper Addr)"| EPROM
-    MCU ---> |"AD0-AD7 (Data Bus)"| EPROM
-    MCU ---> |"PSEN (Prog Enable)"| EPROM
+```ascii
+                    Gripper   Axis 5   Axis 4   Axis 3   Axis 2   Axis 1
 
-    %% MCU to Motor Driver Connections
-    MCU ---> |"P1.0, P1.1 (M1 Ctrl)"| Driver
-    MCU ---> |"P1.2, P1.3 (M2 Ctrl)"| Driver
+                     Motor    Motor    Motor    Motor    Motor    Motor
 
-    %% Driver to Motors
-    Pwr ---> Driver
-    Driver ---> M1
-    Driver ---> M2
+                    Potentio Potentio Potentio Potentio Potentio Potentio
+                     meter    meter    meter    meter    meter    meter
 
-    %% Styling
-    style MCU fill:#f9f,stroke:#333,stroke-width:2px
-    style EPROM fill:#bbf,stroke:#333,stroke-width:2px
-    style Driver fill:#f96,stroke:#333,stroke-width:2px
-    style M1 fill:#fff,stroke:#333,stroke-width:2px
-    style M2 fill:#fff,stroke:#333,stroke-width:2px
+                    ▓●●●●●●▓ ▓●●●●●●▓ ▓●●●●●●▓ ▓●●●●●●▓ ▓●●●●●●▓ ▓●●●●●●▓
+```
+
+## [Control Board](board/README.md)
+
+```ascii
+┌─────────────────────────────────────────────────────────────────────────┐
+│     X8      X7       X6       X5       X4       X3       X2       X1    │
+│ ░░░░░░░░ ░░░░░░░░ ▓●●●●●●▓ ▓●●●●●●▓ ▓●●●●●●▓ ▓●●●●●●▓ ▓●●●●●●▓ ▓●●●●●●▓ │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│             DB25                                        DB9             │
+│  ▓●●●●●●●●●●●●●●●●●●●●●●●●●▓                        ▓●●●●●●●●●▓         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## PC connection
+
+```ascii
+                                                          DB9
+                                                      ▓●●●●●●●●●▓
+                                                           └──────────── PC RS232
+```
+
+## [Teachbox](teachbox/README.md)
+
+```ascii
+               DB25
+   ▓●●●●●●●●●●●●●●●●●●●●●●●●●▓
+     ┌─────────┬─────────┬─────────┬─────────┬─────────┐
+     │         │         │         │         │         │
+     │         │         │         │         │         │
+     │    ○    │    ○    │    ○    │    ○    │    o    │
+     │  MARK   │  GOTO   │   IF    │    OUT  │   TIM   │
+     ├─────────┼─────────┼─────────┼─────────┼─────────┤
+     │         │         │         │         │         │
+     │         │         │         │         │         │
+     │         │         │         │         │  ↓   +  │
+     │   DEL   │    7    │    8    │    9    │  ←      │
+     ├─────────┼─────────┼─────────┼─────────┼─────────┤
+     │         │         │         │         │         │
+     │         │         │         │         │         │
+     │         │         │         │         │    ○    │
+     │   INS   │    4    │    5    │    6    │   POS   │
+     ├─────────┼─────────┼─────────┼─────────┼─────────┤
+     │         │         │         │         │         │
+     │         │         │         │         │         │
+     │    ○    │         │         │         │   ↑  -  │
+     │   RUN   │    1    │    2    │    3    │   →     │
+     ├─────────┼─────────┼─────────┼─────────┼─────────┤
+     │         │         │         │         │         │
+     │         │         │         │         │         │
+     │         │         │    ○    │    ○    │         │
+     │   STOP  │    0    │  • NOP  │ ERR CLR │   ENT   │
+     └─────────┴─────────┴─────────┴─────────┴─────────┘
 ```
