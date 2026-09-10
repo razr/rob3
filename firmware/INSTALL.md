@@ -1,0 +1,89 @@
+# INSTALL
+
+Toolchain prerequisites for assembling and simulating the ROB3 firmware init
+sequence (see `BUILD.md` for how to actually build and test).
+
+## What you need
+
+| Tool | Provides | Used for |
+| :--- | :------- | :------- |
+| `sdas8051` | SDCC 8051 assembler | assemble `sim/init.a51` |
+| `sdld` | SDCC linker (ASlink) | link `.rel` → Intel HEX |
+| `objcopy` | GNU binutils | Intel HEX → raw binary |
+| `s51` | ucSim 8051 simulator | run the ROM, behavioral tests |
+| `make` | GNU Make | drive the build/test targets |
+| `python3` | Python 3 | regenerate `sim/init.a51` (`make gen`) |
+
+`sdas8051` and `sdld` ship in the **sdcc** package; `s51` ships in the
+**ucsim** package.
+
+## Verified environment
+
+These docs were validated on:
+
+- Ubuntu 24.04.4 LTS
+- `sdcc` 4.2.0+dfsg-1  (SDCC 4.2.0, provides `sdas8051`, `sdld`)
+- `ucsim` 0.8.5-1  (provides `s51`)
+- `binutils` 2.42  (provides `objcopy`)
+- GNU Make 4.3, Python 3.12
+
+## Install
+
+### Debian / Ubuntu
+
+```bash
+sudo apt-get update
+sudo apt-get install -y sdcc ucsim binutils make python3
+```
+
+> Note: on some Debian/Ubuntu releases the simulators are split into a
+> separate `sdcc-ucsim` package. If `s51` is missing after installing `sdcc`,
+> also install `ucsim` (or `sdcc-ucsim`):
+> ```bash
+> sudo apt-get install -y ucsim || sudo apt-get install -y sdcc-ucsim
+> ```
+
+### Fedora / RHEL
+
+```bash
+sudo dnf install -y sdcc binutils make python3
+# ucSim (s51) is bundled with the sdcc package on Fedora.
+```
+
+### macOS (Homebrew)
+
+```bash
+brew install sdcc binutils make python3
+# Homebrew's sdcc includes the ucSim simulators (s51).
+# Homebrew binutils installs as gobjcopy; either symlink it to objcopy on
+# PATH or edit OBJCOPY in the Makefile (see BUILD.md).
+```
+
+### From source (SDCC + ucSim)
+
+If your distro lacks packages, build SDCC (which includes ucSim) from
+<http://sdcc.sourceforge.net/>. Ensure `sdas8051`, `sdld`, and `s51` land on
+your `PATH`.
+
+## Verify the installation
+
+```bash
+sdas8051              # prints usage/banner
+sdld -v               # ASlink banner
+s51 -t 51 </dev/null  # ucSim banner, then exits
+objcopy --version
+make --version
+python3 --version
+```
+
+All five must resolve on your `PATH`. Then proceed to `BUILD.md`.
+
+## Troubleshooting
+
+- **`s51: command not found`** — install `ucsim` (or `sdcc-ucsim`). It is not
+  always pulled in by `sdcc`.
+- **`objcopy: command not found` (macOS)** — Homebrew names it `gobjcopy`.
+  Symlink it or set `OBJCOPY=gobjcopy` when invoking `make` (see BUILD.md).
+- **Filename with `@`** — the shipped ROM image is `hex/M2764A@DIP28.HEX`. The
+  Makefile copies it to a shell-safe `sim/build/rob3.hex` automatically; you do
+  not need to rename anything by hand.
