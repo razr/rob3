@@ -340,10 +340,16 @@ baud_measure:
         clr     A
         mov     0x88,A              ; TCON = 0
         mov     0x8A,A              ; TL1 = 0
-        mov     0x8C,A              ; TH1 = 0  (clear timing accumulator)
+        mov     0x8C,A              ; MOV TH0,A -> TH0 = 0 (clear Timer 0 accumulator).
+                                    ; NB: 0x8C = TH0, NOT TH1 (TH1 = 0x8D). Baud
+                                    ; measurement times with Timer 0 (SETB TR0 below).
+                                    ; Raw bytes: F5 8C = MOV 0x8C,A. [BYTE]
         mov     R0,#0x01
         jb      0xB0.0,$            ; wait for P3.0 to go low (start of edge)
         setb    0x8C                ; SETB TR0 -> start Timer 0 during baud measure
+                                    ; NB: operand 0x8C here is the BIT address
+                                    ; TCON.4 (=TR0), NOT the TH0 byte SFR @0x8C.
+                                    ; Raw bytes: D2 8C = SETB bit 0x8C. [BYTE]
 ; ... (baud measurement inner loop continues; see 0x06C4..0x073B in ROM,
 ;      not fully annotated in this pass — flow returns/branches to init_finish)
 
@@ -353,8 +359,11 @@ baud_measure:
 ;------------------------------------------------------------------------------
 init_finish:
         mov     0x1D,#0x0A          ; RAM 0x1D = 10 -> Timer0 tick prescaler (/10)
-        mov     0x8C,#0xE8          ; TH0 = 0xE8 -> Timer 0 reload (system tick timing)
-        setb    0x8C                ; TR0 = 1, start Timer 0 (system tick)
+        mov     0x8C,#0xE8          ; MOV TH0,#0xE8 -> Timer 0 reload (0x8C = TH0 byte SFR)
+        setb    0x8C                ; SETB TR0 (=TCON.4) -> start Timer 0 (system tick).
+                                    ; NB: same operand value 0x8C as the line above but
+                                    ; here it is the BIT address TCON.4, not the TH0 byte.
+                                    ; Raw bytes: 8C E8 = MOV TH0,#0xE8 ; D2 8C = SETB TR0. [BYTE]
         setb    0x20.0              ; flag 0x20.0 = axis subsystem enable
         clr     A
         mov     0x83,#0x58          ; DPH = 0x58 -> ADC/feedback (Y6/Y7), channel A8=0 [HW]
