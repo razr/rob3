@@ -1,5 +1,16 @@
 # Motor Test
 
+> **Runnable project:** the buildable sketches and host console live in
+> [`arduino/`](arduino/) — `arduino/pot_reader/pot_reader.ino` (read a feedback
+> potentiometer) and `arduino/motor_control/motor_control.ino` (keyboard drive
+> with ±80° watchdog + auto-center), plus `arduino/host/monitor.py`. See
+> [`arduino/README.md`](arduino/README.md) for wiring, build, and run steps
+> (toolchain install: `../teachbox/arduino/INSTALL.md`). The per-axis
+> calibration tables below are the measured data those sketches use
+> (`AXIS_CAL` in `arduino/pot_reader/rob3_axis.h`); the listings in this
+> document are a narrative walkthrough — treat the files under `arduino/` as
+> authoritative.
+
 ## L293 (L293D) driver pinout
 
 ```txt
