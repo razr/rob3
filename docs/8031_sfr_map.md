@@ -17,7 +17,7 @@
 | SCON| 0x98 | Serial Control | Set to 0x50 (Mode 1, REN) |
 | SBUF| 0x99 | Serial Buffer | Read/write serial data |
 | P1  | 0x90 | Port 1 | Digital I/O (read for sensors) |
-| IE  | 0xA8 | Interrupt Enable | 0x17 or 0x07 (EA+ES+ET0+EX0 or EA+ET0+EX0) |
+| IE  | 0xA8 | Interrupt Enable | Init: 0x84 (EA+EX1); fixed-baud path 0x07 (EX0+ET0+EX1); auto-baud path 0x17 (adds ES) |
 | P3  | 0xB0 | Port 3 | Special function pins |
 | PSW | 0xD0 | Program Status Word | Bank select (RS0, RS1) |
 | ACC | 0xE0 | Accumulator | General computation |
@@ -29,7 +29,7 @@
 |------|----------|---------|---------|
 | 0    | RS1=0,RS0=0 | 0x00-0x07 | Main loop, general code |
 | 1    | RS1=0,RS0=1 | 0x08-0x0F | ISR ext0, ISR ext1 |
-| 2    | RS1=1,RS0=0 | 0x10-0x17 | Serial ISR (Timer 1) |
+| 2    | RS1=1,RS0=0 | 0x10-0x17 | Serial ISR (0x0300) |
 | 3    | RS1=1,RS0=1 | 0x18-0x1F | Not explicitly used as bank |
 
 ## Port 3 Pin Assignments
@@ -62,17 +62,21 @@
 
 ## Interrupt Priority and Enable
 
-### IE Register Values
-- During normal operation: IE = 0x97 (EA=1, ES=1, ET1=0, EX1=1, ET0=1, EX0=1)
-  - Note: Timer 1 overflow interrupt NOT used (baud gen only)
-- Alternate: IE = 0x07 (fast mode without serial interrupt)
-- Serial interrupt handled via polling RI/TI in Timer 1 ISR
+### IE Register Values (verified from init)
+- Init sets IE = 0x84 (EA + EX1) to start the first axis-feedback cycle.
+- Fixed-baud path (P3.0 low at startup): IE = 0x07 (EX0 + ET0 + EX1; no serial int).
+- Auto-baud path: IE = 0x17 at 0x0739 (adds ES → serial interrupt-driven).
+- Timer 1 overflow interrupt (ET1) is never enabled — Timer 1 is baud-gen only.
 
 ### Interrupt Handling Notes
-- External Int 0 and External Int 1 appear to be edge-triggered (based on TCON settings)
-- The serial port interrupt is effectively handled inside the Timer 1 overflow ISR by checking RI/TI flags directly
-- ISRs save/restore PSW for bank switching
-- ISRs save ACC in register before use
+- External Int 0 and External Int 1 are edge-triggered (per TCON settings).
+- INT1 is driven by the ADC end-of-conversion (EOC → 8031 pin 13); the axis
+  servo ISR runs on each conversion.
+- The serial port has its **own** ISR at 0x0300 (the 0x0023 vector falls through
+  0xFF padding to `ljmp 0x0300` at 0x0035). It is NOT handled inside a Timer 1
+  ISR. When ES is enabled (auto-baud path, IE=0x17) serial is interrupt-driven;
+  otherwise RI/TI may be polled.
+- ISRs save/restore PSW for bank switching and save ACC before use.
 
 ## SCON Configuration
 ```

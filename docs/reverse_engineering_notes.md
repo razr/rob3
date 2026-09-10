@@ -14,13 +14,14 @@
 
 | Address Range | Purpose |
 |---------------|---------|
-| 0x0000        | Reset vector → ljmp jump_05FF |
-| 0x0003        | External Int 0 vector → ljmp jump_003F |
-| 0x000B        | Timer 0 vector → ljmp jump_007F |
-| 0x0013        | External Int 1 vector → ljmp jump_00BF |
-| 0x001B        | Timer 1 vector → ljmp jump_02FF |
-| 0x0023        | Serial interrupt vector → lcall jump_22FE (NOTE: likely disassembly artifact) |
-| 0x05FF        | System initialization (reset handler) |
+| 0x0000        | Reset vector → ljmp 0x0600 (init) |
+| 0x0003        | External Int 0 vector → ljmp 0x0040 |
+| 0x000B        | Timer 0 vector → ljmp 0x0080 |
+| 0x0013        | External Int 1 vector → ljmp 0x00C0 |
+| 0x001B        | Timer 1 vector → unused (0xFF gap; ET1 never enabled) |
+| 0x0023        | Serial vector → 0xFF fillers, falls through to ljmp 0x0300 at 0x0035 |
+| 0x0300        | Serial (UART RX/TX) ISR |
+| 0x0600        | System initialization (reset handler) |
 | 0x0600-0x073C | Hardware init, baud rate detection |
 | 0x073C-0x074D | Final init, start main loop |
 | 0x074D        | **Main loop entry** |
@@ -29,6 +30,11 @@
 | 0x0941-0x0A0B | Program instruction interpreter |
 | 0x0BFF-0x0C64 | Keyboard/teach pendant scanner |
 | 0x0C7F-0x0FDE | Teach pendant command handler / editor |
+
+> Vector targets verified from ROM bytes (see `firmware/src/main.annotated.asm`).
+> The earlier "jump_05FF / jump_003F / jump_02FF / lcall jump_22FE" labels were
+> disasm51 artifacts (0xFF padding decoded as `MOV R7,A` shifted the boundaries);
+> the true reset target is `LJMP 0x0600` (bytes `02 06 00` at 0x0000).
 
 ### Internal RAM (128 bytes: 0x00-0x7F)
 
@@ -65,10 +71,10 @@
 | 0x46    | Teach pendant display register |
 | 0x47    | LED/display output value |
 | 0x48-4D | Axis speed/step parameters (6 axes) |
-| 0x4E-4F | Stepper motor output shadows (Port A, Port C) |
+| 0x4E-4F | DC-motor output shadows (Port A, Port C) |
 | 0x50-55 | Axis current positions (6 axes) |
 | 0x56-57 | Keyboard debounce state |
-| 0x58-5D | Axis encoder/feedback values (6 axes) |
+| 0x58-5D | Axis feedback values from ADC (6 axes) |
 | 0x5E-5F | Additional I/O state |
 | 0x60-65 | Serial RX buffer (6 bytes for axis data) |
 | 0x66-67 | Program counter (offset within external RAM) |
@@ -83,56 +89,68 @@ The 8031 uses MOVX with DPTR where DPH (0x83) selects the "device" and DPL (0x82
 
 | DPH Value | Device/Function |
 |-----------|-----------------|
-| 0x48      | Axis select register (write: select active axis 0-7) |
-| 0x50      | 8255 Port A (stepper motor output - even axes?) |
-| 0x51      | Digital output port (general purpose I/O) |
-| 0x52      | 8255 Port C (stepper motor output - odd axes?) |
+| 0x48      | Aux / axis-select latch (74LS138 Y2/Y3 region; A12=0,A11=1) |
+| 0x50      | 8255 Port A (DC-motor direction bits via L293, axes 0-3) |
+| 0x51      | 8255 Port B (general digital I/O; buffered to DB25 via 74LS244) |
+| 0x52      | 8255 Port C (DC-motor direction bits via L293, axes 4-5 + enables) |
 | 0x53      | 8255 Control register |
-| 0x58      | Axis feedback read (encoder/position input) |
-| 0x59      | Axis position read #2 |
+| 0x58      | ADC / axis feedback select (74LS138 Y6/Y7; A8 = ADC channel ADD-A) |
+| 0x59      | ADC / axis feedback (A8=1 channel) |
 | 0xA0+     | External RAM (program storage) - upper bound probed |
+
+> Device decode confirmed against `hardware/board/74LS138.md`: the decoder's
+> real CPU selects are B=A11 and C=A12; input A is tied to output Y4 (self-latch).
+> The feedback source is an **ADC0808/0809** (see `hardware/board/adc.md`), not a
+> quadrature encoder — its end-of-conversion drives INT1 (8031 pin 13).
 
 ## Interrupt System
 
 ### Reset Vector (0x0000)
 ```
-ljmp jump_05FF   ; Jump to initialization
+ljmp 0x0600      ; Jump to initialization  (bytes: 02 06 00)
 ```
 
-### External Interrupt 0 (0x0003) → jump_003F
-- Stepper motor pulse output ISR
+### External Interrupt 0 (0x0003) → 0x0040
+- DC-motor pulse output ISR
 - Writes motor control to 8255 Port A (DPH=0x50) and Port C (DPH=0x52)
 - Uses register bank 1 (PSW.3 = 1)
 - Reads from RAM locations 0x4E, 0x4F (motor output shadows)
 - Handles debounce on P3.2 input
 - Sets flag 20h.1 (keyboard event) or sets 47h=0xFF (emergency?)
 
-### Timer 0 (0x000B) → jump_0080
+### Timer 0 (0x000B) → 0x0080
 - Periodic tick interrupt
-- Reloads timer: TH0=0x11, TL0=0xE8 (period ≈ 5ms @ 11.0592 MHz)
+- Reloads timer in the ISR: TL0=0x11, TH0=0xE8 (bytes at 0x0080: 75 8A 11 / 75 8C E8)
 - Toggles flag 20h.3 (used for timing), sets 20h.4 (axis update request)
-- Prescaler at 0x1D counts down from 10 → fires 23h.6, 23h.5 every 50ms
+- Prescaler at 0x1D counts down from 10 → fires 23h.6, 23h.5 every ~50ms
 
-### External Interrupt 1 (0x0013) → jump_00BF
+### External Interrupt 1 (0x0013) → 0x00C0
 - **Axis control state machine** (complex ISR)
+- Triggered by the ADC end-of-conversion (EOC → INT1, 8031 pin 13)
 - Uses register bank 1 (PSW.3 = 1)
-- Reads axis feedback from DPH=0x59
-- Performs PID-like servo calculations
+- Reads axis feedback (ADC) from DPH=0x59
+- Performs servo calculations
 - Updates motor outputs to DPH=0x50 / DPH=0x52
 - Manages acceleration/deceleration profiles
 - Rotates through all 6 axes (round-robin via 22h mask)
-- Writes axis select to DPH=0x58
+- Writes axis/channel select to DPH=0x58
 
-### Timer 1 (0x001B) → jump_02FF
-- **Serial communication handler** (baud rate generator in mode 2)
-- Uses register bank 2 (PSW.4 = 1)
+### Timer 1 (0x001B) — unused vector
+- Timer 1 is the UART baud-rate generator (mode 2 auto-reload); its overflow
+  interrupt (ET1) is never enabled, so this vector is a 0xFF gap. Serial is
+  handled by the UART ISR at 0x0300 (reached via fall-through from 0x0035).
+
+### Serial / UART (0x0023 → 0x0300)
+- **Serial communication handler** (interrupt-driven when ES is enabled)
+- The 0x0023 vector slot is 0xFF padding; execution falls through the fillers
+  to `ljmp 0x0300` at 0x0035
 - Handles both RX (98h.0 = RI) and TX (98h.1 = TI)
 - Implements a multi-state protocol parser
 - Commands begin with 0x89-0x8F range bytes
 - 0x81 = special marker (start of data block)
 - Protocol supports: axis position commands, program upload/download, I/O control
 
-## System Initialization (jump_05FF)
+## System Initialization (0x0600)
 
 ```
 1. Delay loop (warm-up)
@@ -146,9 +164,9 @@ ljmp jump_05FF   ; Jump to initialization
 9. Set SP = 0x31
 10. Set 47h = 0xFF, 1Fh = 0xFF
 11. Probe external RAM size:
-    - Start at DPH=0x7F (DPTR=7FFF)
+    - Start at DPTR=0x8000 (DPH=0x80)
     - Write complement, read back, verify
-    - If fails, try DPH=0xA0
+    - If fails, try page DPH=0xA0
     - Store RAM page in 3Eh, set 3Fh = 3Eh+1
 12. Initialize program header in external RAM
 13. Baud rate auto-detection:
@@ -256,7 +274,7 @@ Port C  = 0x00  → All motor outputs off
 ```
 
 ### Port A Function
-- Stepper motor control output (phase signals)
+- DC-motor direction/enable outputs (via L293 H-bridges) for axes 0-3
 - Updated by External Interrupt 0 ISR
 - Shadow register at RAM 0x4E
 
@@ -267,7 +285,7 @@ Port C  = 0x00  → All motor outputs off
 - Supports: SET (OR), CLEAR (AND), TOGGLE (XOR), WRITE operations
 
 ### Port C Function
-- Stepper motor control output (second set)
+- DC-motor direction/enable outputs (via L293 H-bridges) for axes 4-5
 - Updated by External Interrupt 0 ISR
 - Shadow register at RAM 0x4F
 
@@ -304,7 +322,7 @@ For each axis:
 | 0x40+N | Target position |
 | 0x48+N | Speed/step rate |
 | 0x50+N | Current position (host view) |
-| 0x58+N | Encoder feedback value |
+| 0x58+N | ADC feedback value |
 | 0x70+N | Deceleration profile |
 | 0x78+N | ISR workspace |
 
@@ -351,11 +369,11 @@ Interprets key codes and implements:
 
 | Address | Name (proposed) | Description |
 |---------|----------------|-------------|
-| 0x05FF | sys_init | System initialization |
-| 0x003F | isr_ext0 | Motor pulse output interrupt |
-| 0x0080 | isr_timer0 | System tick (5ms) |
-| 0x00BF | isr_ext1 | Axis servo control |
-| 0x02FF | isr_timer1_serial | Serial RX/TX handler |
+| 0x0600 | sys_init | System initialization |
+| 0x0040 | isr_ext0 | Motor pulse output interrupt |
+| 0x0080 | isr_timer0 | System tick (reload TL0=0x11/TH0=0xE8) |
+| 0x00C0 | isr_ext1 | Axis servo control (triggered by ADC EOC) |
+| 0x0300 | isr_serial | UART RX/TX handler (via fall-through from 0x0035) |
 | 0x0541 | serial_tx | Transmit next byte |
 | 0x074D | main_loop | Main execution loop |
 | 0x07D0 | write_digital_out | Set/clear/toggle digital output |
@@ -371,26 +389,51 @@ Interprets key codes and implements:
 
 ## Unknown / Uncertain Areas
 
-1. **Address 0x0023 (serial vector):** The disassembler shows `lcall jump_22FE` at this location, but 0x22FE is outside the 8KB ROM. This is likely a disassembly artifact where the interrupt vector overlaps with padding bytes.
+## Resolved (previously uncertain)
 
-2. **DPH=0x48 purpose:** Written during init with loop counter. May be an axis multiplexer/selector, or could be a secondary 8255 or latch.
+- **0x0023 serial vector:** The `lcall 0x22FE` a disassembler shows is a padding
+  artifact. The real path is: the 0xFF vector slot falls through to `ljmp 0x0300`
+  at 0x0035; the UART ISR lives at 0x0300. [RESOLVED]
+- **DPH device decoding:** Decoded by the **74LS138** (B=A11, C=A12; input A tied
+  to output Y4 as a self-latch; A14/A15 gate peripheral vs SRAM space). See
+  `hardware/board/74LS138.md`. [RESOLVED]
+- **DPH=0x59 / feedback hardware:** An **ADC0808/0809** (8-bit, 8-channel SAR)
+  reading potentiometric position transducers. Its EOC drives INT1
+  (8031 pin 13). See `hardware/board/adc.md`. Feedback is **analog**, not a
+  quadrature encoder. [RESOLVED]
+- **DPH=0x48:** A latch in the 74LS138 Y2/Y3 region (A12=0, A11=1), poked once
+  at init. [RESOLVED — region located; exact latch function still open]
 
-3. **DPH=0x59 function:** Read during axis ISR. Likely encoder/position feedback, but exact hardware (counter, ADC, etc.) is unknown.
+## Motor / feedback type (reconciled with manuals + hardware)
 
-4. **P3.4 input:** Checked in main loop. May be a "program loaded" or "external trigger" signal.
+The ROB3 uses **DC servo motors** driven through **L293 H-bridge** drivers, with
+**potentiometric (analog) position feedback** read via the ADC0808/0809 — per
+`docs/manuals/README.md` (DC servo, absolute potentiometric transducers) and the
+board's `hardware/board/L293.md` / `adc.md`.
 
-5. **P3.0 input:** Used during baud rate detection. When low at startup, uses fixed fast baud rate. Otherwise, auto-detects.
+> NOTE: Earlier drafts of these notes described "stepper motor phase signals"
+> and "encoder" feedback. That was incorrect. The 8255 Port A/C bits are DC-motor
+> **direction/enable** lines into the L293 bridges (see the L293 truth table in
+> `hardware/board/L293.md`), and feedback is analog via the ADC. Any remaining
+> "stepper/phase-table" language elsewhere in this document should be read in
+> that corrected light and is pending a cleanup pass.
 
-6. **P3.2 input:** Checked in ext int 0 ISR for debounce. Possibly a step signal or home switch.
+## Still uncertain / open
 
-7. **Exact servo algorithm:** The math in isr_ext1 involves multiplication (MUL AB), table lookups (MOVC), and conditional branching that suggests a proportional control loop, but the exact gains and profile are not yet fully decoded.
+1. **P3.4 input:** Checked in main loop. May be a "program loaded" or "external
+   trigger" signal.
+2. **P3.2 input:** Checked in ext int 0 ISR for debounce. Possibly a limit/home
+   switch on a motor connector.
+3. **Exact servo algorithm:** isr_ext1 uses MUL AB, MOVC table lookups, and
+   conditional branching consistent with a proportional loop; exact gains and
+   profile not yet fully decoded.
+4. **DPH=0x48 latch exact function** (region known; role not confirmed).
+5. **Port A/C exact bit → motor mapping** for each of the 6 axes.
 
 ## Next Steps
 
 - [ ] Decode the acceleration/deceleration table at ~0x0145 (MOVC lookup)
-- [ ] Map exact bit assignments in Port A/C for each motor phase
-- [ ] Confirm 8255 address decoding (which address lines select A/B/C/Control)
-- [ ] Identify the servo feedback hardware connected to DPH=0x58/0x59
+- [ ] Map exact bit assignments in Port A/C for each DC-motor direction/enable line
 - [ ] Decode the program instruction set completely
-- [ ] Map P3 pin assignments to physical connectors
-- [ ] Determine if DPH=0x48 is a second 8255 or a simple latch
+- [ ] Map P3.4 / P3.2 inputs to physical connectors
+- [ ] Confirm the DPH=0x48 latch's exact function

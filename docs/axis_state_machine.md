@@ -4,6 +4,14 @@
 
 The ROB3 robot has 6 axes, each controlled by an independent state machine that runs within the External Interrupt 1 ISR. The ISR processes one axis per interrupt, cycling through all 6 in a round-robin pattern.
 
+> Hardware note (verified): the motors are **DC servos** driven via **L293
+> H-bridges**, and position feedback is **analog**, read through an
+> **ADC0808/0809** (its EOC drives INT1). See `hardware/board/L293.md`,
+> `hardware/board/adc.md`, and `docs/manuals/README.md`. Where this document
+> says "encoder," read potentiometer-via-ADC; where it discusses "stepper
+> phase tables," treat that as a tentative hypothesis — the Port A/C bits are
+> DC-motor direction/enable lines, not stepper phases.
+
 ## Axis Numbering
 
 | Index | Axis       | Mechanical Function | Symbol | Range          |
@@ -59,7 +67,7 @@ The firmware uses rotating bit masks to identify individual axes:
 
 ```
 ┌─────────────────────────────────────────┐
-│         ISR Entry (jump_00BF)           │
+│         ISR Entry (0x00C0)              │
 │  Save PSW, select bank 1                │
 │  Get current axis from R0 (0x48-0x4D)   │
 │  Derive workspace pointer: R0 + 0x10    │

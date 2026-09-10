@@ -13,7 +13,11 @@ The 8255 is accessed via MOVX instructions where:
 | 0x52      | Port C        | R/W |
 | 0x53      | Control       | W   |
 
-**Note:** This is unusual for a standard 8255. Normally A0/A1 select registers. Here the address decoding appears to use DPH bits to generate independent chip selects or the address space is decoded with wider spacing. The 8031 external bus address lines (from P0/P2) likely have hardware decoding that maps these DPH values to the 8255's A0, A1, and CS pins.
+**Note:** This is unusual for a standard 8255 (normally A0/A1 select registers).
+The board decodes it with the **74LS138** (`hardware/board/74LS138.md`): decoder
+inputs B=A11, C=A12 select device regions, and A14/A15 gate peripheral vs SRAM
+space. The 8255's own A0/A1 (pins 8/9) then pick Port A/B/C/Control within the
+selected block, which is why DPH 0x50–0x53 map to the four 8255 registers.
 
 ## Control Register Configuration
 
@@ -31,10 +35,10 @@ Binary: `1_00_0_0_0_0_0`
 
 **All ports configured as outputs in Mode 0 (simple I/O).**
 
-## Port A (DPH = 0x50) - Stepper Motor Output 1
+## Port A (DPH = 0x50) - DC Motor Direction Output 1
 
 ### Function
-- Drives stepper motor phase signals for one set of axes
+- Drives DC-motor direction/enable signals (via L293 H-bridges) for one set of axes
 - Updated by External Interrupt 0 ISR (motor pulse handler)
 - Shadow register: Internal RAM address 0x4E
 
@@ -90,10 +94,10 @@ The firmware provides four operations controlled by parameter in ACC bits 1-0:
 | 4-3 | Status indicators |
 | 2-0 | External digital outputs |
 
-## Port C (DPH = 0x52) - Stepper Motor Output 2
+## Port C (DPH = 0x52) - DC Motor Direction Output 2
 
 ### Function
-- Drives stepper motor phase signals for second set of axes
+- Drives DC-motor direction/enable signals (via L293 H-bridges) for second set of axes
 - Updated by External Interrupt 0 ISR (motor pulse handler)
 - Shadow register: Internal RAM address 0x4F
 
@@ -129,7 +133,7 @@ movx @DPTR, A    ; Write to hardware
 - Used in External Interrupt 1 ISR for position feedback
 
 ### Axis Feedback Input 2 (DPH = 0x59)
-- Read: returns position/encoder data for selected axis
+- Read: returns position data (ADC) for selected axis
 - Write: initialization value (0x01 written during startup)
 
 ## Hardware Interface Summary
@@ -144,7 +148,7 @@ movx @DPTR, A    ; Write to hardware
 │          │     │ Control  │     └─────────────┘
 │          │     └──────────┘
 │          │     ┌──────────┐     ┌─────────────┐
-│          ├────►│Axis Sel  │     │  Encoders   │
+│          ├────►│Axis Sel  │     │ Potentiom.  │
 │          │     │(DPH=48)  ├────►│  (6 axes)   │
 │          │     └──────────┘     │             │
 │          │◄────┤Feedback  │◄────┤             │
@@ -157,17 +161,21 @@ movx @DPTR, A    ; Write to hardware
 └──────────┘
 ```
 
+## Resolved
+
+1. **Address decoding logic:** DPH 0x48–0x53 are decoded by a **74LS138** — inputs
+   B=A11, C=A12; input A tied to Y4 (self-latch); A14/A15 gate peripheral vs SRAM.
+   See `hardware/board/74LS138.md`. (No GAL/PAL.)
+2. **Motor type:** **DC servo motors** driven through **L293 H-bridges**, not
+   steppers. The Port A/C bits are direction/enable lines; see the truth table in
+   `hardware/board/L293.md` and `docs/manuals/README.md` (DC servo).
+3. **Feedback / INT1 source:** an **ADC0808/0809** reading potentiometric
+   transducers; its EOC drives INT1. See `hardware/board/adc.md`.
+
 ## Open Questions
 
-1. **Address decoding logic:** How are DPH values 0x48-0x53 decoded to physical chip selects? Is there a GAL/PAL, 74138, or other decoder?
-
-2. **Motor type:** Are these stepper motors (phase-driven) or DC servo motors (PWM + direction)? The ISR structure with phase tables suggests steppers.
-
-3. **Feedback type:** What generates the External Interrupt 1 signal? Could be:
-   - Encoder index pulse
-   - External timer/counter overflow
-   - Position comparison circuit
-
-4. **Port B exact mapping:** Which bits drive teach pendant LED segments vs external outputs?
-
-5. **8255 BSR mode:** The control byte 0x80 does not use Bit Set/Reset mode, but the firmware may use BSR commands elsewhere (control writes with bit 7 = 0).
+4. **Port B exact mapping:** Which bits drive teach pendant LED segments vs external
+   outputs (buffered to DB25 via 74LS244)?
+5. **8255 BSR mode:** The control byte 0x80 does not use Bit Set/Reset mode, but the
+   firmware may use BSR commands elsewhere (control writes with bit 7 = 0).
+6. **Port A/C exact bit → axis mapping** for the six DC motors.
