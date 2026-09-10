@@ -63,6 +63,12 @@ The functional labels below are derived from the ringed-out net list, not from c
 - The ADC is tied to the sensor network and multiplexed channel logic.
 - ADC pin 15 (`VREF(+)`) is tied to VCC (+5V), the same rail used by the L293 enable inputs.
 - The conversion and channel-switch behavior is managed by the 8031 interrupt routine and the decoder bus.
+- **Address decode:** the ADC block sits in the `74LS138` Y6/Y7 region (see
+  `74LS138.md`). Firmware reaches it by writing `DPH = 0x58` or `0x59` before
+  `MOVX @DPTR`. The two values differ only in bit 0 = **A8**, which is the ADC
+  channel-select line **ADD A** (routed via 8255 pin 9 / 8031 pin 21). Because
+  only ADD A is CPU-driven (ADD B/ADD C are strapped), toggling `DPH` bit 0 is
+  exactly what steps the reachable analog channel.
 
 ## Firmware confirmation (ADC0808/0809)
 

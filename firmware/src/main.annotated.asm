@@ -14,6 +14,8 @@
 ;   [SIM]   = Verified dynamically in the ucSim/s51 simulator.
 ;   [INFER] = Inferred from context / hardware; NOT yet proven. Treat as
 ;             a hypothesis to confirm.
+;   [HW]    = Confirmed by cross-referencing the hardware schematic docs under
+;             hardware/board/ (ringed-out board connections + decode logic).
 ;
 ; NOTE ON THE ORIGINAL disasm51 LISTING (firmware/src/main.asm)
 ;   The auto-generated main.asm mislabels the reset target as "jump_05FF"
@@ -28,8 +30,10 @@
 ;   EPROM 8K        - M2764A, holds this firmware (code memory)
 ;   SRAM 8K         - External data RAM; stores robot programs (probed at boot)
 ;   8255            - Programmable Peripheral Interface (Ports A/B/C + control)
-;   74LS138         - 3-to-8 decoder. [INFER] Generates the device selects seen
-;                     as DPH values on MOVX (0x48, 0x50-0x53, 0x58, 0x59, ...).
+;   74LS138         - 3-to-8 decoder. [HW] Generates the device selects seen
+;                     as DPH values on MOVX. Real CPU selects are B=A11, C=A12;
+;                     input A is tied to output Y4 (self-latch, not an address
+;                     line). See EXTERNAL DEVICE MAP for the DPH->Yn table.
 ;   74HC373         - Octal transparent latch. [INFER] AD0-AD7 address latch for
 ;                     the 8031 multiplexed low-address/data bus.
 ;   74LS244         - Octal buffer/line driver. [INFER] Input read path
@@ -37,9 +41,10 @@
 ;   L293 x3         - Dual H-bridge motor drivers. 3 x 2 channels = up to 6
 ;                     motor channels -> matches the 6 robot axes driven from
 ;                     8255 Port A / Port C. [INFER on exact channel mapping]
-;   ADC             - Analog-to-digital converter. [INFER] Axis position
-;                     feedback source read via MOVX at DPH=0x58/0x59
-;                     (i.e. feedback is ANALOG, not a quadrature encoder).
+;   ADC             - ADC0808/0809 8-bit, 8-channel SAR ADC. [HW] Axis position
+;                     feedback read via MOVX at DPH=0x58/0x59 (74LS138 Y6/Y7),
+;                     A8 = channel line ADD-A. Feedback is ANALOG, not a
+;                     quadrature encoder. EOC -> INT1 (8031 pin 13).
 ;   M34004          - [INFER] Function not yet confirmed (driver/array?).
 ;   MAX1044         - Switched-capacitor voltage inverter; generates a negative
 ;                     rail (e.g. for the ADC / analog front end). Not directly
@@ -51,15 +56,27 @@
 ;------------------------------------------------------------------------------
 ; EXTERNAL DEVICE MAP (DPH selects the device on MOVX @DPTR)
 ;   DPH   Device                                   Confirmation
-;   0x48  Axis-select latch / mux                  [INFER] written at init
+;   0x48  Aux / axis-select latch (74LS138 Y2/Y3)  [HW] decode: A12=0,A11=1
 ;   0x50  8255 Port A  (motor phase outputs)       [BYTE] init writes 0x00
 ;   0x51  8255 Port B  (general digital out)       [BYTE] init writes 0xFF
 ;   0x52  8255 Port C  (motor phase outputs)       [BYTE] init writes 0x00
 ;   0x53  8255 Control register                    [BYTE] init writes 0x80
-;   0x58  Axis feedback / ADC select               [BYTE] init writes 0x00
-;   0x59  Axis feedback / ADC (2nd)                 [BYTE] init writes 0x01
+;   0x58  ADC / axis feedback, channel A8=0        [BYTE] init writes 0x00
+;   0x59  ADC / axis feedback, channel A8=1        [BYTE] init writes 0x01
 ;   0x80  External SRAM window base                [BYTE] probe starts here
 ;   0xA0  External SRAM (alt page)                 [BYTE] probe fallback
+;
+;   DECODER DERIVATION (confirmed against hardware/board/74LS138.md):        [HW]
+;     The 74LS138 real CPU selects are B = A11 and C = A12; input A (pin 1) is
+;     tied to output Y4 (pin 11) as a self-latch, so A is NOT a CPU address
+;     line. A14/A15 gate peripheral space (A14=1,A15=0) vs external SRAM
+;     (A15=1). Thus the peripheral DPH values decode purely on A11/A12:
+;         A12=0,A11=1 -> Y2/Y3 region -> DPH 0x48 (aux/axis latch)
+;         A12=1,A11=0 -> Y4/Y5 region -> DPH 0x50..0x53 (8255; A0/A1 pick port)
+;         A12=1,A11=1 -> Y6/Y7 region -> DPH 0x58/0x59 (ADC; Y7 -> ADC pin 22)
+;     0x50..0x53 are distinguished by the 8255's OWN A0/A1, not the decoder.
+;     0x58 vs 0x59 differ only in A8 = the ADC channel line ADD A (only ADD A
+;     is CPU-driven; ADD B/ADD C are strapped). See hardware/board/adc.md.
 ;------------------------------------------------------------------------------
 ; INTERRUPT VECTORS (actual targets, verified from ROM bytes)
 ;   0x0000 RESET   -> LJMP 0x0600  (init)
@@ -153,11 +170,12 @@ delay_warmup:
         djnz    ACC,delay_warmup    ; decrement A, repeat -> long warm-up delay
 
 ;------------------------------------------------------------------------------
-; (2) Poke the axis-select device (DPH=0x48) once. [INFER] Likely resets the
-;     axis multiplexer/latch (74LS138-decoded) to a known state.            [BYTE]
+; (2) Poke the aux/axis-select device (DPH=0x48, 74LS138 Y2/Y3 region). Resets
+;     that block to a known state before use.                               [BYTE]
+;     Decode: A12=0,A11=1 -> Y2/Y3 (see EXTERNAL DEVICE MAP).               [HW]
 ;------------------------------------------------------------------------------
-        mov     0x83,#0x48          ; DPTR high (0x83=DPH) = 0x48  -> axis-select device
-        movx    @DPTR,A             ; write A to device 0x48                  [INFER purpose]
+        mov     0x83,#0x48          ; DPH = 0x48 -> aux/axis-select block (Y2/Y3)
+        movx    @DPTR,A             ; write A to device 0x48
         djnz    R0,$-1              ; short settle delay (rel FD -> back to 0x060A)
         djnz    R0,$                ; short settle delay (rel FE -> self)
 
@@ -179,12 +197,13 @@ delay_warmup:
         movx    @DPTR,A             ; Port A = 0x00  (motor phase outputs off)
 
 ;------------------------------------------------------------------------------
-; (4) Prime the feedback/ADC device (DPH=0x59) with 0x01. [INFER] Selects a
-;     channel or starts a conversion on the ADC front end.                  [BYTE]
+; (4) Prime the ADC/feedback device (DPH=0x59, 74LS138 Y6/Y7 region) with 0x01.
+;     0x59 => A8=1 selects ADC channel via ADD-A; write kicks the front end.
+;     Decode: A12=1,A11=1 -> Y6/Y7 -> ADC (Y7 -> ADC pin 22).              [BYTE][HW]
 ;------------------------------------------------------------------------------
-        mov     0x83,#0x59          ; DPH = 0x59 -> axis feedback / ADC device
+        mov     0x83,#0x59          ; DPH = 0x59 -> ADC/feedback device, channel A8=1
         mov     A,#0x01             ; A = 1
-        movx    @DPTR,A             ; write 0x01 to feedback/ADC device       [INFER purpose]
+        movx    @DPTR,A             ; write 0x01 to ADC/feedback device
 
 ;------------------------------------------------------------------------------
 ; (5) Clear internal RAM 0x7F..0x01 and select register bank 0.             [BYTE]
@@ -259,9 +278,9 @@ hdr_next:
 ram_done:
         mov     0x08,#0x48          ; RAM 0x08 (bank1 R0) = 0x48 axis base ptr
         mov     0x22,#0x01          ; 0x22 = axis rotation mask, start at axis 0 (bit0)
-        mov     0x83,#0x58          ; DPH = 0x58 -> axis feedback select
+        mov     0x83,#0x58          ; DPH = 0x58 -> ADC/feedback (Y6/Y7), channel A8=0 [HW]
         clr     A
-        movx    @DPTR,A             ; feedback select = 0 (axis 0)
+        movx    @DPTR,A             ; feedback select = 0 (axis 0 / ADD-A low)
         mov     0xA8,#0x84          ; IE = 0x84 -> EA=1, enable EX1 (axis servo int) [INFER exact mask]
         jb      0x22.0,$            ; wait until axis-0 mask bit clears (one ISR pass) [SIM to confirm]
         jnb     0x22.0,$            ; then wait until it is set again (sync)          [SIM to confirm]
@@ -338,8 +357,8 @@ init_finish:
         setb    0x8C                ; TR0 = 1, start Timer 0 (system tick)
         setb    0x20.0              ; flag 0x20.0 = axis subsystem enable
         clr     A
-        mov     0x83,#0x58          ; DPH = 0x58 -> feedback select
-        movx    @DPTR,A             ; select axis 0 feedback
+        mov     0x83,#0x58          ; DPH = 0x58 -> ADC/feedback (Y6/Y7), channel A8=0 [HW]
+        movx    @DPTR,A             ; select axis 0 feedback (ADD-A low)
         setb    0xA8.7              ; EA = 1, global interrupts ON
 ; 074D:                 (falls through into main loop)
         ; ---> MAIN LOOP entry at 0x074D (annotated in a later pass)
