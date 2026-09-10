@@ -313,7 +313,9 @@ speed_loop:
 
 ;------------------------------------------------------------------------------
 ; (12) UART / Timer setup for serial comms.                                 [BYTE]
-;      TMOD=0x21, TL1/TH1 seeded, SCON=0x50 (mode 1, 8-bit UART, REN=1).   [BYTE]
+;      TMOD=0x21 (T1 mode2 = UART baud gen, T0 mode1), TCON=0,
+;      SCON=0x50 (mode 1, 8-bit UART, REN=1). The baud-measure block below
+;      clears Timer 0 (TL0/TH0); the Timer 1 reload (TH1) is derived later.  [BYTE]
 ;------------------------------------------------------------------------------
         mov     0x89,#0x21          ; TMOD = 0x21 -> T1 mode2 (baud gen), T0 mode1
         mov     0x88,#0x00          ; TCON = 0 (timers/int flags cleared)
@@ -331,15 +333,15 @@ baud_detect:
         setb    0x20.2              ; flag 0x20.2 = "baud ready"
 ;------------------------------------------------------------------------------
 ; (12b) Baud-rate auto-detection: measure the width of an incoming serial
-;       edge on P3.0 by counting a timing loop, then derive the Timer-1
-;       reload (TH1) so the UART matches the host's baud rate.
+;       edge on P3.0 using TIMER 0 (TL0/TH0 cleared, SETB TR0 below), then
+;       derive the Timer-1 reload (TH1) so the UART baud matches the host.
 ;       Full inner-loop math continues past 0x06B6; annotated at instruction
 ;       level below. Behavior (measured value) is [SIM]-pending.           [BYTE]
 ;------------------------------------------------------------------------------
 baud_measure:
         clr     A
         mov     0x88,A              ; TCON = 0
-        mov     0x8A,A              ; TL1 = 0
+        mov     0x8A,A              ; MOV TL0,A -> TL0 = 0 (0x8A = TL0, NOT TL1 @0x8B)
         mov     0x8C,A              ; MOV TH0,A -> TH0 = 0 (clear Timer 0 accumulator).
                                     ; NB: 0x8C = TH0, NOT TH1 (TH1 = 0x8D). Baud
                                     ; measurement times with Timer 0 (SETB TR0 below).
