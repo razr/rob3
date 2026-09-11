@@ -65,7 +65,7 @@ README's "Open work".
 ## Verified: XRAM is the peripheral window
 
 The board's memory-mapped peripherals live in the 8031 external data space
-(`MOVX @DPTR`), selected by DPH (see `../../src/main.annotated.asm` and
+(`MOVX @DPTR`), selected by DPH (see `../../src/annotated/main.annotated.asm` and
 `hardware/board/74LS138.md`). Crucially, **ucSim `s51` exposes writable XRAM at
 those addresses**, so we can model peripherals by seeding/reading XRAM — no
 mid-run interception needed:

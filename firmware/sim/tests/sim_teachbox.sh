@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Behavioral test: run the REAL ROM's Teachbox keypad scanner (kbd_scan, entry
 # 0x0C00) in ucSim and assert it decodes the column-group bits into the key
-# index bases documented in src/teachbox.annotated.asm and
+# index bases documented in src/annotated/teachbox.annotated.asm and
 # hardware/teachbox/board.md.
 #
 # The scanner strobes matrix rows via the 8255 (unmodeled here) and reads the

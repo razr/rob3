@@ -21,7 +21,7 @@ metadata:
 > see `rob3-hardware`. Authoritative live docs:
 > `docs/reverse_engineering_notes.md`, `docs/axis_state_machine.md`,
 > `docs/8031_sfr_map.md`, `docs/8255_mapping.md`, and the annotated listings
-> `firmware/src/*.annotated.asm`. This skill is the fast index; the docs are the
+> `firmware/src/annotated/*.annotated.asm`. This skill is the fast index; the docs are the
 > detail.
 
 ## Provenance convention (apply to EVERY firmware claim)

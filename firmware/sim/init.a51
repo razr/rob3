@@ -3,7 +3,7 @@
 ; Regenerate via the Makefile 'gen' target (do not hand-edit).
 ;
 ; Device-under-test for the golden byte-match test. Mnemonic-level
-; documentation of the same code lives in src/main.annotated.asm.
+; documentation of the same code lives in src/annotated/main.annotated.asm.
 
         .area CODE (ABS)
         .org    0x0600

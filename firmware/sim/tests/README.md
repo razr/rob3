@@ -3,7 +3,7 @@
 Behavioral tests for the annotated ROB3 firmware regions. Each script runs the
 **real ROM** (`../../hex/M2764A@DIP28.HEX`) in the ucSim `s51` simulator and
 asserts that runtime behavior matches the annotated listings
-(`../../src/main.annotated.asm`, `../../src/teachbox.annotated.asm`).
+(`../../src/annotated/main.annotated.asm`, `../../src/annotated/teachbox.annotated.asm`).
 
 These complement the *golden byte-match* tests (`make verify`), which prove the
 transcriptions equal the ROM. These prove the ROM *behaves* as annotated.
@@ -123,7 +123,7 @@ dump iram 0x48 0x55 ; dump sfr 0xa8 0xa8
 ## `sim_teachbox.sh` — keypad scanner decode
 
 **Premise.** Run the Teachbox keypad scanner `kbd_scan` (entry `0x0C00`, see
-`../../src/teachbox.annotated.asm`) and prove it decodes the column-group bits
+`../../src/annotated/teachbox.annotated.asm`) and prove it decodes the column-group bits
 into the documented key-index bases. The scanner strobes matrix rows via the
 8255 (unmodeled here) and reads the three column groups from **P1 (SFR 0x90)**,
 top 3 bits.

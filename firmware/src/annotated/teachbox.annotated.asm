@@ -5,7 +5,7 @@
 ; Source ROM image : firmware/bin/M2764A@DIP28.BIN  (8 KB, M2764A EPROM)
 ; CPU              : Intel 8031 / MCS-51, XTAL = 11.0592 MHz
 ; This file        : Human-annotated listing of the TEACHBOX keypad/LED code.
-;                    Companion to firmware/src/main.annotated.asm (init) and
+;                    Companion to firmware/src/annotated/main.annotated.asm (init) and
 ;                    the hardware docs under hardware/teachbox/.
 ;
 ; PROVENANCE TAGS

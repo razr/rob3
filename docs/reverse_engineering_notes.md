@@ -31,7 +31,7 @@
 | 0x0BFF-0x0C64 | Keyboard/teach pendant scanner |
 | 0x0C7F-0x0FDE | Teach pendant command handler / editor |
 
-> Vector targets verified from ROM bytes (see `firmware/src/main.annotated.asm`).
+> Vector targets verified from ROM bytes (see `firmware/src/annotated/main.annotated.asm`).
 > The earlier "jump_05FF / jump_003F / jump_02FF / lcall jump_22FE" labels were
 > disasm51 artifacts (0xFF padding decoded as `MOV R7,A` shifted the boundaries);
 > the true reset target is `LJMP 0x0600` (bytes `02 06 00` at 0x0000).

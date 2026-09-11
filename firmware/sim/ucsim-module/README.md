@@ -108,5 +108,5 @@ Calibrate `strobed_row()`:
 
 Once calibrated, a `set hardware teachbox <row> <group>` press will be detected
 by `kbd_scan` end-to-end, feeding `kbd_handle` (axis-select / jog) so a key
-sequence drives the modelled axis — see `firmware/src/teachbox.annotated.asm`
+sequence drives the modelled axis — see `firmware/src/annotated/teachbox.annotated.asm`
 and `firmware/sim/tests/sim_teachbox.sh`.

@@ -9,7 +9,7 @@ mnemonic-level documentation lives in the corresponding annotated .asm.
 
   label : symbol placed at <org> (default "region_start")
   doc    : path to the mnemonic annotation this region mirrors
-           (default "src/main.annotated.asm")
+           (default "src/annotated/main.annotated.asm")
 """
 import sys
 
@@ -19,7 +19,7 @@ def main():
         sys.exit(__doc__)
     rom_path, out_path, org_s, length_s = sys.argv[1:5]
     label = sys.argv[5] if len(sys.argv) >= 6 else "region_start"
-    doc = sys.argv[6] if len(sys.argv) >= 7 else "src/main.annotated.asm"
+    doc = sys.argv[6] if len(sys.argv) >= 7 else "src/annotated/main.annotated.asm"
     org = int(org_s, 0)
     length = int(length_s, 0)
 

@@ -26,7 +26,7 @@ metadata:
 
 An **Intel 8031** boots an external **M2764A 8 KB EPROM** (`firmware/hex`,
 `firmware/bin`); reset is `LJMP 0x0600`. The in-tree firmware is assembly; the
-annotated listings live in `firmware/src/*.annotated.asm`. See `rob3-hardware`.
+annotated listings live in `firmware/src/annotated/*.annotated.asm`. See `rob3-hardware`.
 
 ## Two-layer verification model (how this project proves firmware)
 
@@ -45,8 +45,8 @@ the generated `.a51`**; edit the annotated `.asm` and regenerate.
 
 | Region   | Addresses         | Source                              |
 | :------- | :---------------- | :---------------------------------- |
-| init     | `0x0600..0x074C`  | `firmware/src/main.annotated.asm`   |
-| teachbox | `0x0C00..0x0C6B`  | `firmware/src/teachbox.annotated.asm` (keypad scanner) |
+| init     | `0x0600..0x074C`  | `firmware/src/annotated/main.annotated.asm`   |
+| teachbox | `0x0C00..0x0C6B`  | `firmware/src/annotated/teachbox.annotated.asm` (keypad scanner) |
 
 The main loop, ISRs, serial protocol, and motion interpreter are **not yet
 transcribed**.

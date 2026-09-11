@@ -11,8 +11,8 @@
 # runtime behavior matches the annotated .asm files.
 #
 # Regions:
-#   init      0x0600..0x074C  -> src/main.annotated.asm
-#   teachbox  0x0C00..0x0C6B  -> src/teachbox.annotated.asm (keypad scanner)
+#   init      0x0600..0x074C  -> src/annotated/main.annotated.asm
+#   teachbox  0x0C00..0x0C6B  -> src/annotated/teachbox.annotated.asm (keypad scanner)
 
 # ---- Layout ------------------------------------------------------------------
 BIN        := bin/M2764A@DIP28.BIN
@@ -104,9 +104,9 @@ test: verify sim-init sim-run sim-teachbox ## Run all tests (golden + behavioral
 # ---- Regenerate the byte-exact sources from the ROM --------------------------
 gen: ## Regenerate the .a51 region sources from the ROM (byte-exact)
 	@python3 $(SIMDIR)/gen_init.py "$(BIN)" $(INIT_SRC) $(INIT_ORG) $(INIT_LEN) \
-		init_start src/main.annotated.asm
+		init_start src/annotated/main.annotated.asm
 	@python3 $(SIMDIR)/gen_init.py "$(BIN)" $(TB_SRC) $(TB_ORG) $(TB_LEN) \
-		kbd_scan_region src/teachbox.annotated.asm
+		kbd_scan_region src/annotated/teachbox.annotated.asm
 	@echo "regenerated $(INIT_SRC) and $(TB_SRC)"
 
 clean: ## Remove build artifacts
