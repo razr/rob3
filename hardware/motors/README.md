@@ -8,10 +8,30 @@ potentiometric** position feedback.
 
 | File | Component | Notes |
 | :--- | :-------- | :---- |
-| [`bueler-motor.md`](bueler-motor.md) | Bühler 6 VDC motor (P/N 31.042.303-1) | Per-motor noise-suppression (1N4007 diode, cap, GE varistor); 8255 → L293 drive mapping |
+| [`bueler-motor.md`](bueler-motor.md) | Bühler 6 VDC motor (P/N 31.042.303-1) | Drives axes 1–3 (base/shoulder/elbow). Per-motor noise-suppression (1N4007 diode, cap, GE varistor); 8255 → L293 drive mapping |
 | [`VP12-5kΩ-potentiometer.md`](VP12-5kΩ-potentiometer.md) | 5 kΩ VP12 precision feedback potentiometer | Wiper → ADC (see `../board/adc.md`) |
-| [`nmm-motor.md`](nmm-motor.md) | NMM motor | **stub — needs part details** |
+| [`nmm-motor.md`](nmm-motor.md) | NMM (Nihon Mini Motor) gearmotor + integrated pot | Drives axes 4–5 + gripper (wrist pitch/roll/gripper). Miniature closed-loop micro-servo; same H-bridge/wiper→ADC topology |
 | [`test.md`](test.md) | Arduino bring-up tests | Per-axis potentiometer calibration tables + motor drive sketches |
+
+## Motor-per-axis assignment
+
+The arm uses **two different motor types**, split by axis: the three larger
+proximal joints use **Bühler** motors, and the three smaller distal
+joints/gripper use miniature **NMM** gearmotors. Both types are DC servos with
+analog potentiometric feedback, driven identically (L293 H-bridge + wiper→ADC).
+
+| Axis (1-based) | Axis (firmware, 0-based) | Joint | Motor |
+| :------------: | :----------------------: | :---- | :---- |
+| 1 | 0 | Base rotation | **Bühler** 6 VDC |
+| 2 | 1 | Shoulder | **Bühler** 6 VDC |
+| 3 | 2 | Elbow | **Bühler** 6 VDC |
+| 4 | 3 | Wrist pitch | **NMM** gearmotor |
+| 5 | 4 | Wrist roll | **NMM** gearmotor |
+| — | 5 | Gripper | **NMM** gearmotor |
+
+> Axis numbering: original robot documentation is **1-based**; the firmware is
+> **0-based** (see `../../docs/axis_state_machine.md`). The gripper is axis 5 in
+> firmware terms.
 
 ## Drive & feedback overview
 
