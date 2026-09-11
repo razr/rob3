@@ -5,6 +5,29 @@
 !/.kiro/steering/
 !/.kiro/steering/rob3-lessons-learned.md
 
+# ... and keep only the committed ROB3 firmware skills tracked
+# (re-ignore all other skills so the shared ECC skill set stays untracked).
+!/.kiro/skills/
+/.kiro/skills/*
+!/.kiro/skills/arduino-hardware-bringup/
+!/.kiro/skills/arduino-hardware-bringup/SKILL.md
+!/.kiro/skills/mcs51-assembly/
+!/.kiro/skills/mcs51-assembly/SKILL.md
+!/.kiro/skills/mcs51-c-programming/
+!/.kiro/skills/mcs51-c-programming/SKILL.md
+!/.kiro/skills/mcs51-debugging/
+!/.kiro/skills/mcs51-debugging/SKILL.md
+!/.kiro/skills/rob3-arduino-bringup/
+!/.kiro/skills/rob3-arduino-bringup/SKILL.md
+!/.kiro/skills/rob3-firmware-map/
+!/.kiro/skills/rob3-firmware-map/SKILL.md
+!/.kiro/skills/rob3-firmware-sim/
+!/.kiro/skills/rob3-firmware-sim/SKILL.md
+!/.kiro/skills/rob3-hardware/
+!/.kiro/skills/rob3-hardware/SKILL.md
+!/.kiro/skills/ucsim/
+!/.kiro/skills/ucsim/SKILL.md
+
 # Python bytecode
 __pycache__/
 *.pyc

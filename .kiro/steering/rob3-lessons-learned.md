@@ -52,3 +52,18 @@ byte off the real entry (0xFF padding decoded as `MOV R7,A` shifts boundaries).
 Verified truths: reset is `LJMP 0x0600` (not "jump_05FF"); the keypad scanner is
 entered at **0x0C00** (0x0BFF is padding); the key handler at **0x0C80**
 (0x0C7F is padding). Confirm entry addresses from the ROM bytes, not the labels.
+
+## Provenance tagging (always)
+
+Tag every firmware claim with how it was established, and keep unproven claims
+separate from verified ones:
+
+- **[BYTE]** — verified from the ROM bytes (byte-exact / golden match).
+- **[SIM]** — verified by running the ROM in ucSim and observing state.
+- **[HW]** — confirmed against a hardware doc or a bench (Arduino) bring-up.
+- **[INFER]** — hypothesis, not yet proven. Never state as fact.
+
+If you can't tag it, you haven't verified it. This applies to annotations,
+docs, commit messages, and session notes alike. Verify against the
+ROM/simulator/hardware **before** asserting; commit in small, honest steps.
+See the `rob3-firmware-map` skill for the domain map this convention annotates.
