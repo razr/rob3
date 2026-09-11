@@ -1,12 +1,12 @@
 # firmware/sim/tests
 
-Behavioral tests for the ROB3 firmware **initialization sequence**. Each script
-runs the **real ROM** (`../../hex/M2764A@DIP28.HEX`) in the ucSim `s51`
-simulator and asserts that runtime behavior matches
-`../../src/main.annotated.asm`.
+Behavioral tests for the annotated ROB3 firmware regions. Each script runs the
+**real ROM** (`../../hex/M2764A@DIP28.HEX`) in the ucSim `s51` simulator and
+asserts that runtime behavior matches the annotated listings
+(`../../src/main.annotated.asm`, `../../src/teachbox.annotated.asm`).
 
-These complement the *golden byte-match* test (`make verify`), which proves the
-transcription equals the ROM. These prove the ROM *behaves* as annotated.
+These complement the *golden byte-match* tests (`make verify`), which prove the
+transcriptions equal the ROM. These prove the ROM *behaves* as annotated.
 
 ## Running
 
@@ -15,9 +15,10 @@ sets the environment):
 
 ```bash
 cd firmware
-make sim-init     # runs tests/sim_init.sh
-make sim-run      # runs tests/sim_run.sh
-make test         # golden + both behavioral tests
+make sim-init      # runs tests/sim_init.sh     (init sequence)
+make sim-run       # runs tests/sim_run.sh       (init past the ADC/INT1 gate)
+make sim-teachbox  # runs tests/sim_teachbox.sh  (keypad scanner decode)
+make test          # golden (init+teachbox) + all behavioral tests
 ```
 
 Standalone (must provide the env vars the scripts expect):
@@ -119,6 +120,41 @@ dump iram 0x48 0x55 ; dump sfr 0xa8 0xa8
 
 ---
 
+## `sim_teachbox.sh` — keypad scanner decode
+
+**Premise.** Run the Teachbox keypad scanner `kbd_scan` (entry `0x0C00`, see
+`../../src/teachbox.annotated.asm`) and prove it decodes the column-group bits
+into the documented key-index bases. The scanner strobes matrix rows via the
+8255 (unmodeled here) and reads the three column groups from **P1 (SFR 0x90)**,
+top 3 bits.
+
+**Injected stimulus.** For the first strobe row (row 0), set P1 to activate one
+column-group bit, then break at `0x0C2A` (`mov R6,A` — the index finaliser for a
+hit) and read the computed index in **R6**.
+
+**Assertions**
+
+| # | P1 value | Group | Expected index base (R6) |
+| :- | :------- | :---- | :----------------------- |
+| 1 | `0x20` (bit 5) | group 1 | `0x00` |
+| 2 | `0x40` (bit 6) | group 2 | `0x08` |
+| 3 | `0x80` (bit 7) | group 3 | `0x10` |
+| 4 | `0x00` (none)  | —       | scanner does NOT reach the hit path `0x0C2A` |
+
+This validates the 3-group × 8-row index mapping (indices `0x00..0x18` for the
+25 keys) without needing the full multi-pass debounce, which requires the real
+8255 row hardware.
+
+**Simulator command (per case)**
+
+```
+reset ; pc 0x0c00
+set mem sfr 0x90 <P1> ; set mem iram 0x47 0x00 ; set mem iram 0x20 0x00
+break 0x0c2a ; run        # read R6 at the stop (index base)
+```
+
+---
+
 ## Interpreting failures
 
 - On failure a script prints `FAIL <what was expected>` followed by the full
@@ -134,7 +170,8 @@ dump iram 0x48 0x55 ; dump sfr 0xa8 0xa8
 
 ## Scope
 
-These tests cover the **init region only** (`0x0600`–`0x074C`). The main loop,
-ISRs, serial protocol, and motion interpreter are not exercised here. See
-`../../BUILD.md` for the overall build/verify pipeline and `../README.md` for
-the directory layout.
+These tests cover the annotated regions: the **init sequence** (`0x0600`–
+`0x074C`) and the **Teachbox keypad scanner** (`0x0C00`–`0x0C6B`). The main
+loop, ISRs, serial protocol, motion interpreter, and the rest of the Teachbox
+key handler (`0x0C80`+) are not exercised here. See `../../BUILD.md` for the
+overall build/verify pipeline and `../README.md` for the directory layout.
