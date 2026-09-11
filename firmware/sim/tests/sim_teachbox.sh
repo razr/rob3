@@ -114,6 +114,54 @@ check_jog 0x80 0x01 7f "- (decrement)"
 check_jog 0xff 0x00 ff "+ clamps at 0xFF"
 check_jog 0x00 0x01 00 "- clamps at 0x00"
 
+# ---------------------------------------------------------------------------
+# 5) POS-DIGIT DIRECT ENTRY ("POS a . n ENT"): type a decimal number and commit
+#    it straight into the selected axis slot, instead of jogging +/- by one.
+#
+#    (a) DECIMAL ACCUMULATE (entry 0x0D65, A = digit): value = value*10 + digit,
+#        low byte in iram 0x6D. Typing 1,2,8 must build 0x6D: 1 -> 12 -> 128.
+#    (b) COMMIT (0x0D9B..0x0DA1): R1 = 0x4F + R4, then MOV @R1,0x6D writes the
+#        accumulated value into the axis position slot (axis = R4-2, R4=2->0x51).
+#    Both verified in src/annotated/teachbox.annotated.asm.
+# ---------------------------------------------------------------------------
+# Feed one digit: PC=0x0D65 with ACC=digit (0x0D65 MOV R6,A), high byte 0x6E=0,
+# B(0xF0)=0; run to the store RET/branch (0x0D77 single-byte, 0x0D7B two-digit).
+pos_digit() { # prev_low  digit  -> prints resulting 0x6D
+  printf 'reset\nset mem iram 0x6d %s\nset mem iram 0x6e 0x00\nset mem sfr 0xf0 0x00\npc 0x0d65\nset mem sfr 0xe0 %s\nbreak 0x0d77\nbreak 0x0d7b\nrun\ndump iram 0x6d 0x6d\nquit\n' "$1" "$2" \
+    | timeout 15 $SIM $SIMFLAGS "$SAFEHEX" 2>/dev/null | sed 's/\x1b\[0K//g' \
+    | awk '/^0x6d/{print $2; exit}'
+}
+
+check_digit() { # prev digit expected desc
+  local got; got="$(pos_digit "$1" "$2")"
+  if [[ "${got^^}" == "${3^^}" ]]; then
+    pass "pos-digit $4: 0x6D=$1 +digit=$2 -> 0x$got"
+  else
+    die "pos-digit $4: expected 0x$3, got 0x${got:-?}"
+  fi
+}
+
+# Build 128 by typing 1, then 2, then 8.
+check_digit 0x00 0x01 01 "type 1 -> 1"
+check_digit 0x01 0x02 0c "type 2 -> 12"
+check_digit 0x0c 0x08 80 "type 8 -> 128"
+
+# Commit: R4=2 (axis 1) so R1 = 0x4F+2 = 0x51; accumulator 0x6D=0x80 -> slot 0x51.
+commit_axis() { # r4  accum_low  -> prints resulting axis slot value
+  local slot; slot=$(printf '0x%02x' $(( 0x4f + $1 )))
+  printf 'reset\nset mem iram %s 0x00\nset mem iram 0x6d %s\nset mem iram 0x04 0x%02x\npc 0x0d9b\nbreak 0x0da1\nrun\ndump iram %s %s\nquit\n' \
+    "$slot" "$2" "$1" "$slot" "$slot" \
+    | timeout 15 $SIM $SIMFLAGS "$SAFEHEX" 2>/dev/null | sed 's/\x1b\[0K//g' \
+    | awk '/^0x5/{print $2; exit}'
+}
+
+got="$(commit_axis 2 0x80)"
+if [[ "${got^^}" == "80" ]]; then
+  pass "pos-commit: type 128 into axis 1 -> slot 0x51 = 0x80"
+else
+  die "pos-commit: expected slot 0x51=0x80, got 0x${got:-?}"
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "sim_teachbox: OK"
 else

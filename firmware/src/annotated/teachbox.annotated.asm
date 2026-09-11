@@ -202,9 +202,10 @@ kh_ax_lo:
         mov     0x29,#0x40          ; 75 29 40  mode 0x29 = 0x40 (POSITION mode) [BYTE]
         ; ... POSITION-mode entry established: R1 now points at the selected
         ;     axis's position slot (0x50+axis). The +/- jog (kh_jog below) then
-        ;     increments/decrements THAT slot. The POS-digit entry (POS a . n)
-        ;     assembles a numeric value via an encoded state machine (0x6D/0x6E,
-        ;     lookup at 0x0FC4) and is NOT annotated in this pass. [INFER]
+        ;     increments/decrements THAT slot. The POS-digit direct entry
+        ;     (POS a . n) assembles a decimal value in (0x6E:0x6D) via *10+digit
+        ;     and commits it with MOV @R1,0x6D at 0x0D9F — annotated below and
+        ;     [SIM]-verified (typing 1,2,8 -> 128 into the axis slot).
 
 ;==============================================================================
 ; AXIS JOG  kh_jog (0x0E26)                                             [BYTE]
@@ -245,6 +246,65 @@ kh_jog_move:
 
 ;------------------------------------------------------------------------------
 ; Exit/other-branch stubs referenced above (targets confirmed, bodies [INFER]).
+;==============================================================================
+; POS-DIGIT DIRECT ENTRY  (the manual's "POS a . n ENT")               [BYTE][SIM]
+;------------------------------------------------------------------------------
+; The alternative to jogging with +/- : type a decimal number and commit it
+; straight into the selected axis's position slot. Two pieces, both verified
+; in ucSim:
+;
+;   (A) DECIMAL ACCUMULATE  — each digit key does  value = value*10 + digit,
+;       building a 16-bit value in the pair (0x6E:0x6D) = (high:low).
+;   (B) COMMIT              — MOV @R1,0x6D at 0x0D9F writes the accumulated low
+;       byte into the axis slot @R1 (= 0x50 + axis), where R1 = R4 + 0x4F.
+;
+; The numeric-entry keys reach the accumulate step at 0x0D65; the accumulator
+; low byte is 0x6D, high byte 0x6E. `MUL AB` with B=#0x0A is the *10.
+;
+; Verified in ucSim (typing 1,2,8):
+;   0x6D: 0x00 --(1)--> 0x01 --(2)--> 0x0C(=12) --(8)--> 0x80(=128)
+; and the commit with R4=2 (axis 1) / 0x6D=0x80 writes slot 0x51 = 0x80.
+; So "POSITION, select axis 1, type 1 2 8, ENT" sets axis 1 to 128, whereas
+; kh_jog (+/-) only steps the same slot by +/-1 per press.               [SIM]
+;------------------------------------------------------------------------------
+        org     0x0D65
+pos_digit:                          ; reached with A = the pressed digit (0..9)
+        mov     R6,A                ; FE        R6 = this digit
+        mov     A,0x6D              ; E5 6D     A = current accumulator low byte
+        mov     B,#0x0A             ; 75 F0 0A  B = 10
+        mul     AB                  ; A4        A = low*10 (B = carry-out)
+        jb      0x29.3,pd_add       ; 20 4B 09  bit 0x4B = 0x29.3: two-digit mode?
+        ; --- (single-byte path) store low*10 (+digit handled by caller) -------
+        ; (0x0D6F..0x0D74 set/clear flags then fall to the store below)
+        mov     0x6D,A              ; F5 6D     accumulator low = value*10
+        ret                         ; 22
+pd_add:                             ; 0x0D78
+        add     A,R6                ; 2E        A = value*10 + digit
+        mov     0x6D,A              ; F5 6D     store new accumulator low
+        clr     A                   ; E4
+        addc    A,B                 ; 35 F0     propagate the *10 carry...
+        mov     R6,A                ; FE
+        mov     A,0x6E              ; E5 6E     ...into the high byte:
+        mov     B,#0x0A             ; 75 F0 0A
+        mul     AB                  ; A4        high = high*10 + carry
+        ; 0x0D86.. store high:
+        mov     0x6E,A              ; F5 6E     accumulator high byte
+        ; (continues into the mode/command dispatch at 0x0D8B)
+
+;------------------------------------------------------------------------------
+; COMMIT the accumulated value to the selected axis slot                 [BYTE][SIM]
+;   R1 = R4 + 0x4F  (R4 = axis+2 numbering, so axis 1 -> R1 = 0x51)
+;   @R1 = 0x6D      (write the accumulated low byte into the axis position)
+;------------------------------------------------------------------------------
+        org     0x0D9B
+pos_commit:
+        mov     A,R4                ; EC        A = axis selector (R4)
+        add     A,#0x4F             ; 24 4F     -> 0x4F + R4  (axis slot base)
+        mov     R1,A                ; F9        R1 -> axis position slot (0x50+axis)
+        mov     @R1,0x6D            ; A7 6D     @R1 = accumulated value (COMMIT) [SIM]
+        acall   0x0D38              ; D1 38     post-commit housekeeping
+        ajmp    0x0884              ; 81 84     back to the editor/dispatch
+
 ;------------------------------------------------------------------------------
         ; kh_0cb1 (0x0CB1): RET (a bare exit target of `jb 0x2A.6`).
         ; kh_0cea (0x0CEA): arg-entry-busy branch.
@@ -272,8 +332,13 @@ kh_ret:
 ;   selected axis position slot (@R1 = 0x50+axis) with 0x00/0xFF clamping, then
 ;   arms the motion subsystem (0x2F set, watchdog 0x19=0x64) so the servo ISR
 ;   drives the motor — the manual's "a +/- ENT".
-; - Still [INFER] / not annotated: the POS-digit entry (POS a . n) numeric
-;   assembly (0x6D/0x6E, lookup at 0x0FC4), the servo ISR motor drive itself
+; - POS-digit direct entry is now [BYTE][SIM]-verified: numeric keys build a
+;   decimal value in (0x6E:0x6D) via value*10+digit (MUL AB by 10 at 0x0D68/
+;   0x0D81), and MOV @R1,0x6D at 0x0D9F commits it into the selected axis slot
+;   (R1 = 0x4F + R4). Confirmed: typing 1,2,8 gives 0x6D = 128, and the commit
+;   writes axis-1 slot 0x51 = 0x80. This is the "type a number" alternative to
+;   the +/- jog.
+; - Still [INFER] / not annotated: the servo ISR motor drive itself
 ;   (0x00C0 -> 8255 Port A/C -> L293), and the MARK/GOTO/IF/OUT/TIM/RUN/STOP
 ;   command handlers.
 ;==============================================================================
