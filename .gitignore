@@ -1,0 +1,10 @@
+# Kiro local config/steering: ignore everything under .kiro/ ...
+/.kiro/*
+/.kiro/steering/*
+# ... but keep the committed ROB3 lessons-learned steering file tracked.
+!/.kiro/steering/
+!/.kiro/steering/rob3-lessons-learned.md
+
+# Python bytecode
+__pycache__/
+*.pyc
