@@ -130,6 +130,30 @@ make                       # full build; or: make -C src/sims/s51.src
   vs. the **`ucsim_51`** you build from source. The `cl_hw` API below tracks the
   source (~0.9.9); check `src/sims/s51.src/hwcl.h` if a signature differs.
 
+### Build structure & what to rebuild (avoid the "nothing to be done" trap)
+
+ucSim is layered, and *where* you edit decides *what* you must rebuild:
+
+- **`src/core/*`** (`sim.src`, `cmd.src`, `utils.src`, ...) — the **shared core
+  library** used by every target simulator (file loading, the command
+  interpreter, `cl_uc`, memory, consoles).
+- **`src/sims/<target>.src/`** (e.g. **`s51.src`** for the 8051) — the
+  **per-CPU simulator** that links against that core; this is where a `cl_hw`
+  module and `mk_hw_elements()` live.
+
+Rebuild rule:
+
+| You changed… | Rebuild with |
+| :----------- | :----------- |
+| only `src/sims/s51.src/*` (e.g. added a `cl_hw` module) | `make -C src/sims/s51.src` |
+| anything under `src/core/*` (e.g. `uc.cc`, command layer) | **top-level `make`** (rebuilds the core lib, then relinks the sims) |
+| not sure / mixed | `make` from the top; `make clean && make` if still stale |
+
+> **Gotcha:** if you edit a `src/core/*` file and only run
+> `make -C src/sims/s51.src`, make prints **"Nothing to be done for 'all'"** and
+> the binary keeps the old behavior — the subdir build doesn't see the core
+> dependency. Always run the **top-level `make`** for core changes.
+
 ### Anatomy of a `cl_hw` peripheral
 
 Header: subclass `cl_hw`, declare state + the overrides.
