@@ -10,13 +10,17 @@ built into a custom `ucsim_51`.
 
 ## Status
 
-- **Module: works structurally.** Compiles, links into `ucsim_51`, registers as
-  a `HW_GPIO` element, and responds to `set hardware teachbox <row> <group>`
-  (prints a confirmation).
-- **Open item: strobe→row calibration.** The module still needs its
-  `strobed_row()` decode calibrated to the exact values the firmware writes to
-  the 8255 Port B strobe (XRAM `0x5100`). Until then a press is not yet matched
-  to the correct scanned row end-to-end. See "Open work" below.
+- **Module: works end-to-end.** Compiles, links into `ucsim_51`, registers as
+  a `HW_GPIO` element, responds to `set hardware teachbox <row> <group>`, and a
+  press is detected by the real firmware scanner (`kbd_scan`, 0x0C00) on the
+  correct strobed row.
+- **Strobe→row decode: calibrated & verified.** The firmware seeds the strobe
+  from `0x47 & 0x0F` and advances the **high nibble** by `+0x10` per row
+  (`no_hit: add A,#0x10`), recovering the row as `(strobe >> 4) & 7`
+  (`swap A / anl A,#0x07`). So `strobed_row() = cur_strobe >> 4` is exactly the
+  firmware's own row numbering. Verified in ucSim: pressing row R makes the
+  scanner see the column only at strobe `0x46 == (R<<4)` for R = 0..7. Covered
+  by `../tests/sim_teachbox_module.sh`.
 
 ## Files
 
@@ -89,6 +93,37 @@ printf 'set hardware teachbox 0 1\nreset\npc 0x0c00\n...\nquit\n' \
   | ucsim_51 -t 51 -X 11.0592M /tmp/rob3.hex
 ```
 
+## What works: key press -> axis motion
+
+Three stages connect a Teachbox key to a robot axis moving. Each is verified;
+the automated end-to-end run is `../tests/demo_teachbox_axis.sh`
+(`make demo-teachbox`).
+
+1. **Press → scanner sees it.** `set hardware teachbox <row> <group>` holds a
+   key; the real firmware scanner `kbd_scan` (0x0C00) detects it on the strobed
+   row that matches `<row>` (verified: hit at strobe `0x46 == row<<4`).
+2. **Axis-select.** `kbd_handle` (0x0C80) turns a numeric key index into an
+   axis: `R1 = 0x50+axis`, mode `0x29 = 0x40` (POSITION). (key index 2 → axis 0.)
+3. **Jog.** `kh_jog` (0x0E26) with `ACC.0=0`/`1` increments/decrements the
+   selected axis's position slot `@R1` (`0x50+axis`), clamped `0x00..0xFF`.
+
+Minimal interactive drive of stage 1 (prove the press is seen):
+```bash
+cp firmware/hex/M2764A@DIP28.HEX /tmp/rob3.hex
+printf 'set hardware teachbox 1 1\nreset\npc 0x0c00\nset mem iram 0x47 0x00\nset mem iram 0x20 0x00\nbreak 0x0c2a\nrun\ndump iram 0x46 0x46\nquit\n' \
+  | ucsim_51 -t 51 -X 11.0592M /tmp/rob3.hex     # -> 0x46 = 0x10 (row 1)
+```
+
+> **Honest limitation — no single free-run yet.** A plain `reset; run` does
+> **not** reach the scanner: init stalls at the un-modelled ADC/INT1 gate (the
+> reason `make sim-run` injects an INT1/EOC stimulus), and the keypad
+> **debounce** (state in `0x56`/`0x57` + flags `0x20.5/.6`) needs several
+> main-loop passes that are fiddly to reproduce free-standing. The demo above
+> therefore drives the three stages deterministically (`pc`/`break`) rather than
+> from a free-running boot. Wiring a full free-run (inject the init gates → run
+> the main loop → hold a key across debounce → observe the servo ISR drive the
+> motor) is the remaining integration step.
+
 ## How reads/writes dispatch (for maintainers)
 
 `cl_memory_cell::read()` calls **every** registered hw operator in order and
@@ -97,16 +132,17 @@ wins. The teachbox is added after the `cl_port` for P1, so its `read()` return
 is authoritative. The teachbox `read()` therefore returns the column bits
 directly (idling the 3 column lines LOW), not `port_pins`-masked data.
 
-## Open work
+## Status: done (verified)
 
-Calibrate `strobed_row()`:
-1. Capture the exact byte the firmware writes to XRAM `0x5100` at each row
-   iteration of `kbd_scan` (break at the strobe write `0x0C0C`, read `ACC`).
-2. Map those strobe values to matrix rows 0..7.
-3. Update `cl_teachbox::strobed_row()` accordingly (currently assumes
-   `row = strobe >> 4`, which does not match the observed `0x5100` values).
+The `strobed_row()` calibration is complete and verified — `row = strobe >> 4`
+matches the firmware's row stepping (see the Status note above). A
+`set hardware teachbox <row> <group>` press is detected by `kbd_scan` end-to-end
+on the correct row, feeding `kbd_handle` (axis-select / jog) so a key sequence
+can drive the modelled axis — see
+`firmware/src/annotated/teachbox.annotated.asm`,
+`firmware/sim/tests/sim_teachbox_module.sh` (the module end-to-end test), and
+`firmware/sim/tests/sim_teachbox.sh` (the P1-injection scanner/handler test).
 
-Once calibrated, a `set hardware teachbox <row> <group>` press will be detected
-by `kbd_scan` end-to-end, feeding `kbd_handle` (axis-select / jog) so a key
-sequence drives the modelled axis — see `firmware/src/annotated/teachbox.annotated.asm`
-and `firmware/sim/tests/sim_teachbox.sh`.
+Possible future work (not required for the teachbox to function): drive a full
+key *sequence* through the main-loop poll and assert the resulting axis motion
+(ties `kbd_scan` → `kbd_handle` → `kh_jog` → servo ISR together).

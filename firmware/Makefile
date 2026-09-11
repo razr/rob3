@@ -43,7 +43,7 @@ SIMFLAGS   := -t 51 -X 11.0592M
 SAFEHEX    := $(BUILD)/rob3.hex
 
 .PHONY: all verify verify-init verify-teachbox \
-        sim-init sim-run sim-teachbox test gen clean help
+        sim-init sim-run sim-teachbox sim-teachbox-module demo-teachbox test gen clean help
 
 all: verify ## Default: assemble all regions and prove they match the ROM
 
@@ -97,8 +97,16 @@ sim-teachbox: $(SAFEHEX) ## Behavioral: run the keypad scanner, assert key decod
 	@SAFEHEX=$(SAFEHEX) SIM="$(SIM)" SIMFLAGS="$(SIMFLAGS)" \
 		$(SIMDIR)/tests/sim_teachbox.sh
 
+sim-teachbox-module: $(SAFEHEX) ## Behavioral: exercise the compiled teachbox cl_hw module (opt-in; skips w/o ucsim_51)
+	@SAFEHEX=$(SAFEHEX) SIMFLAGS="$(SIMFLAGS)" \
+		$(SIMDIR)/tests/sim_teachbox_module.sh
+
+demo-teachbox: $(SAFEHEX) ## Demo: teachbox key press -> axis-select -> jog -> axis position moves (needs custom ucsim_51)
+	@SAFEHEX=$(SAFEHEX) SIMFLAGS="$(SIMFLAGS)" \
+		$(SIMDIR)/tests/demo_teachbox_axis.sh
+
 # ---- Aggregate ---------------------------------------------------------------
-test: verify sim-init sim-run sim-teachbox ## Run all tests (golden + behavioral)
+test: verify sim-init sim-run sim-teachbox sim-teachbox-module ## Run all tests (golden + behavioral)
 	@echo "ALL TESTS PASSED"
 
 # ---- Regenerate the byte-exact sources from the ROM --------------------------

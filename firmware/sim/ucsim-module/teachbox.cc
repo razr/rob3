@@ -51,7 +51,11 @@ cl_teachbox::init(void)
 }
 
 // Which matrix row is currently strobed, derived from the row-strobe value.
-// The firmware advances the strobe as 0x00,0x10,0x20,... (row = strobe>>4).
+// VERIFIED against the firmware: kbd_scan seeds the strobe from (0x47 & 0x0F)
+// and advances the HIGH nibble by +0x10 per row (no_hit: add A,#0x10),
+// recovering the row as (strobe >> 4) & 7 (swap A / anl A,#0x07). So the CPU
+// writes 0x00,0x10,0x20,... and row = strobe>>4. Confirmed in ucSim: pressing
+// row R makes the scanner see the column only at strobe 0x46 == (R<<4).
 int
 cl_teachbox::strobed_row(void)
 {

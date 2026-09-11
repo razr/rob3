@@ -209,17 +209,23 @@ printf 'set hardware teachbox 0 1\nreset\npc 0x0c00\n...\nquit\n' \
   | ucsim_51 -t 51 -X 11.0592M /tmp/rob3.hex
 ```
 
-### Open work — calibrate `strobed_row()`
+### `strobed_row()` — calibrated & verified
 
-The module currently assumes `row = cur_strobe >> 4`, which does **not** match
-the observed 8255 Port B (`0x5100`) values. In the firmware the strobe pattern
-is held in IRAM **`0x46`** and the LED/row output latch in **`0x47`** (distinct
-bytes — `sim_teachbox.sh` seeds `0x47`). Correct procedure:
-1. Break at the strobe write (`0x0C0C`) and read `ACC`/`0x5100` each row of
-   `kbd_scan`.
-2. Map those exact strobe bytes → matrix rows 0..7.
-3. Update `cl_teachbox::strobed_row()` to that mapping.
-Verify end-to-end against `firmware/sim/tests/sim_teachbox.sh`.
+`row = cur_strobe >> 4` is correct: the firmware seeds the strobe from
+`0x47 & 0x0F` and advances the **high nibble** by `+0x10` per row
+(`no_hit: add A,#0x10`), recovering the row as `(strobe >> 4) & 7`
+(`swap A / anl A,#0x07`). So the CPU drives `0x00,0x10,0x20,…,0x70` on 8255
+Port B and the module decodes each directly. (Note IRAM `0x46` holds the strobe
+pattern and `0x47` the LED/row latch — distinct bytes; `sim_teachbox.sh` seeds
+`0x47`.)
+
+Verified end-to-end with the compiled module: pressing row R makes `kbd_scan`
+see the column only at strobe `0x46 == (R<<4)` for R = 0..7, all three groups
+decode, and release yields no hit. Covered by
+`firmware/sim/tests/sim_teachbox_module.sh` (opt-in: needs the custom
+`ucsim_51`; skips gracefully otherwise). The P1-injection scanner/handler test
+`firmware/sim/tests/sim_teachbox.sh` covers the index/handler decode without the
+module.
 
 ## Reading failures (ROB3 quick triage)
 

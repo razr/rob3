@@ -58,9 +58,10 @@ axis-select, and `kh_jog` work into a "type keys, watch the axis" demo.
 Rather than the breakpoint-injection approach, a genuine compile-time ucSim
 peripheral was written — see `../ucsim-module/` (`teachbox.cc`/`teachboxcl.h`
 + README). It builds into a custom `ucsim_51`, registers as `HW_GPIO`, and
-responds to `set hardware teachbox <row> <group>`. Remaining work is
-calibrating its strobe->row decode to the firmware's 0x5100 values; see that
-README's "Open work".
+responds to `set hardware teachbox <row> <group>`. Its strobe→row decode is
+calibrated and verified (`row = strobe >> 4`); a press is detected by the real
+`kbd_scan` on the correct row end-to-end — see the module README and the
+`../tests/sim_teachbox_module.sh` test.
 
 ## Verified: XRAM is the peripheral window
 

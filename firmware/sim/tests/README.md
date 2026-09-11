@@ -17,9 +17,17 @@ sets the environment):
 cd firmware
 make sim-init      # runs tests/sim_init.sh     (init sequence)
 make sim-run       # runs tests/sim_run.sh       (init past the ADC/INT1 gate)
-make sim-teachbox  # runs tests/sim_teachbox.sh  (keypad scanner decode)
+make sim-teachbox  # runs tests/sim_teachbox.sh  (keypad scanner decode, P1 injection)
+make sim-teachbox-module  # runs tests/sim_teachbox_module.sh (compiled teachbox cl_hw; opt-in)
 make test          # golden (init+teachbox) + all behavioral tests
 ```
+
+> `sim-teachbox-module` exercises the **compiled** ucSim teachbox peripheral
+> (`../ucsim-module/`) with `set hardware teachbox <row> <group>` instead of
+> injecting P1. It needs the custom `ucsim_51` (point at it with
+> `UCSIM_51=/path/to/ucsim_51`, or it auto-probes PATH and the default source
+> build dir) and **skips** cleanly if that binary isn't present, so a stock-s51
+> `make test` still passes.
 
 Standalone (must provide the env vars the scripts expect):
 
