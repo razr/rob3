@@ -88,6 +88,32 @@ check_axis 0x02 50 "axis 0"
 check_axis 0x03 51 "axis 1"
 check_axis 0x07 55 "axis 5"
 
+# ---------------------------------------------------------------------------
+# 4) AXIS JOG (kh_jog, 0x0E26): "a +/- ENT" moves the selected axis one step.
+#    With R1 -> the axis position slot, ACC.0 selects direction:
+#      ACC.0=0 -> INC @R1 (clamped at 0xFF), ACC.0=1 -> DEC @R1 (clamped at 0x00)
+#    We preset iram 0x51 (an axis slot) and R1 (iram 0x01, bank 0) and run 0x0E26.
+# ---------------------------------------------------------------------------
+jog() { # start_val  acc  -> prints resulting 0x51
+  printf 'reset\nset mem iram 0x51 %s\nset mem iram 0x01 0x51\nset mem sfr 0xd0 0x00\npc 0x0e26\nset mem sfr 0xe0 %s\nbreak 0x0e40\nbreak 0x0e2f\nbreak 0x0e36\nrun\ndump iram 0x51 0x51\nquit\n' "$1" "$2" \
+    | timeout 15 $SIM $SIMFLAGS "$SAFEHEX" 2>/dev/null | sed 's/\x1b\[0K//g' \
+    | awk '/^0x51/{print $2; exit}'
+}
+
+check_jog() { # start acc expected desc
+  local got; got="$(jog "$1" "$2")"
+  if [[ "${got^^}" == "${3^^}" ]]; then
+    pass "jog $4: 0x51 $1 -> 0x$got"
+  else
+    die "jog $4: expected 0x$3, got 0x${got:-?}"
+  fi
+}
+
+check_jog 0x80 0x00 81 "+ (increment)"
+check_jog 0x80 0x01 7f "- (decrement)"
+check_jog 0xff 0x00 ff "+ clamps at 0xFF"
+check_jog 0x00 0x01 00 "- clamps at 0x00"
+
 if [[ $fail -eq 0 ]]; then
   echo "sim_teachbox: OK"
 else

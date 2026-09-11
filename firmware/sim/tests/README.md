@@ -161,6 +161,21 @@ i.e. axis = keyindex − 2, R1 = 0x50 + axis (that axis's current-position slot)
 Byte `0x2A` (which holds the bit-addressed gate flags 0x55/0x56/0x57) is cleared
 so the axis path is taken.
 
+### Axis jog (kh_jog, entry 0x0E26)
+
+Asserts the manual's "a +/- ENT" — jog the selected axis one step. With R1
+pointing at the axis position slot, ACC bit 0 picks direction:
+
+| # | start (0x51) | ACC.0 | direction | expected |
+| :- | :----------- | :---- | :-------- | :------- |
+| 8  | `0x80` | 0 | + (increment) | `0x81` |
+| 9  | `0x80` | 1 | − (decrement) | `0x7F` |
+| 10 | `0xFF` | 0 | + at max | `0xFF` (clamped, no overflow) |
+| 11 | `0x00` | 1 | − at min | `0x00` (clamped, no underflow) |
+
+After adjusting the position the routine arms the motion subsystem (sets 0x2F,
+watchdog 0x19=0x64) so the servo ISR drives the motor toward the new value.
+
 **Simulator command (per case)**
 
 ```

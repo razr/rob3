@@ -200,10 +200,48 @@ kh_ax_lo:
         add     A,#0x50             ; 24 50     A = axis + 0x50  -> RAM pointer
         mov     R1,A                ; F9        R1 -> current position of this axis
         mov     0x29,#0x40          ; 75 29 40  mode 0x29 = 0x40 (POSITION mode) [BYTE]
-        ; ... POSITION-mode entry established. The subsequent digit entry
-        ;     (POS a . n) and the +/- jog that writes the axis target and drives
-        ;     the motion executor (8255 Port A/C -> L293) continue past here and
-        ;     are NOT annotated in this pass. [INFER]
+        ; ... POSITION-mode entry established: R1 now points at the selected
+        ;     axis's position slot (0x50+axis). The +/- jog (kh_jog below) then
+        ;     increments/decrements THAT slot. The POS-digit entry (POS a . n)
+        ;     assembles a numeric value via an encoded state machine (0x6D/0x6E,
+        ;     lookup at 0x0FC4) and is NOT annotated in this pass. [INFER]
+
+;==============================================================================
+; AXIS JOG  kh_jog (0x0E26)                                             [BYTE]
+;------------------------------------------------------------------------------
+; The manual's "a +/- ENT" — move the selected axis one step forward/back.
+; Reached (with R1 -> the selected axis position slot 0x50+axis) when a +/-
+; arrow key is processed. Direction is ACC bit 0:
+;   ACC.0 = 0  -> INCREMENT the axis position (@R1), clamped at 0xFF
+;   ACC.0 = 1  -> DECREMENT the axis position (@R1), clamped at 0x00
+; then it arms the motion subsystem so the servo ISR drives the motor toward
+; the new position.  Verified in ucSim:
+;   @R1=0x80, ACC.0=0 -> 0x81 ; ACC.0=1 -> 0x7F
+;   @R1=0xFF, ACC.0=0 -> stays 0xFF (no overflow)
+;   @R1=0x00, ACC.0=1 -> stays 0x00 (no underflow)                       [BYTE]
+;==============================================================================
+        org     0x0E26
+kh_jog:
+        orl     0x20,#0x60          ; 43 20 60  set flags 0x20.5+0x20.6 (jog active)
+        jb      0xE0.0,kh_jog_dec   ; 20 E0 07  ACC.0 == 1 -> decrement path
+        ; --- increment (e.g. the '+' direction) ---
+        cjne    @R1,#0xFF,kh_jog_inc ; B7 FF 01 already at max? (0xFF)
+        ret                         ; 22        clamp: do not overflow past 0xFF
+kh_jog_inc:
+        inc     @R1                 ; 07        axis position += 1
+        sjmp    kh_jog_move         ; 80 05
+kh_jog_dec:
+        mov     A,@R1               ; E7        read current position
+        jnz     kh_jog_dodec        ; 70 01     nonzero -> ok to decrement
+        ret                         ; 22        clamp: do not underflow past 0x00
+kh_jog_dodec:
+        dec     @R1                 ; 17        axis position -= 1
+kh_jog_move:
+        mov     0x21,#0x00          ; 75 21 00  reset axis-active mask
+        setb    0x2F                ; D2 2F     signal "motion requested"
+        mov     0x19,#0x64          ; 75 19 64  arm the axis watchdog (0x64 ticks)
+        ret                         ; 22        servo ISR (0x00C0) now drives the
+                                    ;           motor toward the new @R1 position
 
 ;------------------------------------------------------------------------------
 ; Exit/other-branch stubs referenced above (targets confirmed, bodies [INFER]).
@@ -230,7 +268,12 @@ kh_ret:
 ;   mode 0x29 = 0x40 (POSITION), implementing the manual's "numeric key selects
 ;   the axis" (hardware/teachbox/README.md). Watch the byte-vs-bit gotcha: the
 ;   `jb/setb 0x55/0x56/0x57` operands are BITS of byte 0x2A, not RAM bytes.
-; - Still [INFER] / not annotated: the +/- jog + POS-digit entry that writes the
-;   axis target and calls the motion executor (8255 Port A/C -> L293), and the
-;   MARK/GOTO/IF/OUT/TIM/RUN/STOP command handlers.
+; - kh_jog (0x0E26) is now [BYTE]-verified: +/- increments/decrements the
+;   selected axis position slot (@R1 = 0x50+axis) with 0x00/0xFF clamping, then
+;   arms the motion subsystem (0x2F set, watchdog 0x19=0x64) so the servo ISR
+;   drives the motor — the manual's "a +/- ENT".
+; - Still [INFER] / not annotated: the POS-digit entry (POS a . n) numeric
+;   assembly (0x6D/0x6E, lookup at 0x0FC4), the servo ISR motor drive itself
+;   (0x00C0 -> 8255 Port A/C -> L293), and the MARK/GOTO/IF/OUT/TIM/RUN/STOP
+;   command handlers.
 ;==============================================================================
