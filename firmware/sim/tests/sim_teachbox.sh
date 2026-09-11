@@ -59,6 +59,35 @@ else
   pass "no column active -> scanner does NOT reach the hit path (0x0C2A)"
 fi
 
+# ---------------------------------------------------------------------------
+# 3) AXIS SELECT (kbd_handle POSITION-mode path, entry 0x0C80).
+#    Feed a key index in A and, after the axis-select body completes (break at
+#    the RET 0x0C0B1), assert R1 = 0x50+axis and mode 0x29 = 0x40.
+#    Verified mapping: key index N -> axis N-2 -> R1 = 0x50 + (N-2).
+#    Byte 0x2A holds the bit-addressed gate flags (0x55/0x56/0x57); clear it so
+#    the axis path is taken.
+# ---------------------------------------------------------------------------
+axis_r1() { # keyindex
+  printf 'reset\npc 0x0c80\nset mem sfr 0xe0 %s\nset mem iram 0x2a 0x00\nbreak 0x0cb1\nrun\ndump iram 0x29 0x29\nquit\n' "$1" \
+    | timeout 15 $SIM $SIMFLAGS "$SAFEHEX" 2>/dev/null | sed 's/\x1b\[0K//g'
+}
+
+check_axis() { # keyindex  expected_R1_hex  axis_desc
+  local out r1 m29
+  out="$(axis_r1 "$1")"
+  r1="$(awk '/^     R0 R1/{getline; print $2; exit}' <<<"$out")"
+  m29="$(awk '/^0x29/{print $2; exit}' <<<"$out")"
+  if [[ "${r1^^}" == "${2^^}" && "${m29^^}" == "40" ]]; then
+    pass "key index $1 -> $3: R1=0x$r1, mode 0x29=0x40 (POSITION)"
+  else
+    die "key index $1 ($3): expected R1=0x$2 & 0x29=0x40, got R1=0x${r1:-?} 0x29=0x${m29:-?}"
+  fi
+}
+
+check_axis 0x02 50 "axis 0"
+check_axis 0x03 51 "axis 1"
+check_axis 0x07 55 "axis 5"
+
 if [[ $fail -eq 0 ]]; then
   echo "sim_teachbox: OK"
 else

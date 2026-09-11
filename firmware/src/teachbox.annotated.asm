@@ -144,47 +144,76 @@ kbd_evt:
 
 
 ;==============================================================================
-; KEY HANDLER  kbd_handle (0x0C7F ...)                              [BYTE][INFER]
+; KEY HANDLER  kbd_handle (entry 0x0C80)                            [BYTE][INFER]
 ;------------------------------------------------------------------------------
-; Entered from tb_poll with A = the key index returned by kbd_scan. This is the
-; large Teachbox command/editor dispatcher (modes: INPUT / POSITION / RUN /
-; STEP / DISPLAY / BREAK, per hardware/teachbox/README.md). Only the prologue is
-; annotated with certainty here; the per-key routines below it are extensive and
-; are flagged [INFER] pending a dedicated pass.
+; Entered from tb_poll with A = the key index (0x00..0x18) returned by kbd_scan.
+; This is the Teachbox command/editor dispatcher (modes: INPUT / POSITION / RUN
+; / STEP / DISPLAY / BREAK, per hardware/teachbox/README.md).
+;
+; This pass annotates the AXIS-SELECT / POSITION-mode entry — the code behind
+; the manual's "press a numeric key 1..6 to select the axis, then jog it with
+; +/-" and the "POS a . n ENT" positioning command. Other command handlers
+; (MARK/GOTO/IF/OUT/TIM, RUN/STOP, editor) are reached from the same dispatch
+; but are NOT annotated here and are flagged [INFER].
+;
+; IMPORTANT byte-vs-bit note: `jb 0x57` / `jb 0x56` use BIT addresses, i.e.
+; bit 0x57 = byte 0x2A bit 7, bit 0x56 = byte 0x2A bit 6, and `setb 0x57`,
+; `setb 0x55` likewise are bits of byte 0x2A. They are NOT the RAM bytes 0x55/
+; 0x56/0x57. (Verified in ucSim: clearing byte 0x2A takes the axis path.)
 ;==============================================================================
         org     0x0C7F
         ; 0x0C7F: FF  (padding byte; the handler is CALLED at 0x0C80)
 kbd_handle:                         ; entry = 0x0C80
-        dec     A                   ; 14        index-1 (0-base the key index)
-        cjne    A,#0x0E,kh_not_clr  ; B4 0E 09  index 0x0E (CLR) ? [INFER label]
-        clr     A                   ; E4        -> reset entry state:
-        mov     0x6D,A              ; F5 6D       clear command/arg buffer 0x6D
-        mov     0x2A,A              ; F5 2A       clear editor-flags 0x2A
-        orl     0x47,#0xF8          ; 43 47 F8    force the row/LED strobe bits high
+        dec     A                   ; 14        A = keyindex - 1 (0-base the index)
+        cjne    A,#0x0E,kh_not_clr  ; B4 0E 09  was it the CLR key? [INFER: CLR=0x0E]
+        clr     A                   ; E4        CLR pressed -> reset entry state:
+        mov     0x6D,A              ; F5 6D       clear numeric-arg buffer 0x6D
+        mov     0x2A,A              ; F5 2A       clear editor flag byte 0x2A
+        orl     0x47,#0xF8          ; 43 47 F8    idle the row/LED strobe bits
         ret                         ; 22
+
 kh_not_clr:
-        jb      0x57,kh_0cea        ; 20 57 5A  [INFER] debounce/repeat gate
-        jb      0x56,kh_0cb1        ; 20 56 1E  [INFER]
-        setb    0x57                ; D2 57
-        cjne    A,#0x0A,kh_0ca1     ; B4 0A 09  key 0x0A ? [INFER: mode key]
+        jb      0x2A.7,kh_0cea      ; 20 57 5A  bit 0x57 = 0x2A.7 (arg-entry busy?) [INFER]
+        jb      0x2A.6,kh_ret       ; 20 56 1E  bit 0x56 = 0x2A.6 (already active?) [INFER]
+        setb    0x2A.7              ; D2 57     mark arg-entry busy (bit 0x2A.7)
+        cjne    A,#0x0A,kh_ax_lo    ; B4 0A 09  key index-1 == 0x0A ? [INFER: mode key]
+        ; --- (index-1)==0x0A branch: enter a mode with sub-state 0x20 --------
         mov     R3,#0x20            ; 7B 20
-        mov     0x29,#0x20          ; 75 29 20  set editor mode/sub-state 0x29
+        mov     0x29,#0x20          ; 75 29 20  mode/sub-state 0x29 = 0x20 [INFER]
         anl     0x47,#0xF7          ; 53 47 F7
         ret                         ; 22
-kh_0ca1:
-        jnc     kh_0cb2             ; 50 0F
-        dec     A                   ; 14
-        cjne    A,#0x06,$+3         ; B4 06 00  compare against 6 (axis count?)
-        jnc     kh_0d23             ; 50 7A     index >= 7 -> other handler
-        setb    0x55                ; D2 55     [INFER] select/gripper-ish flag
-        add     A,#0x50             ; 24 50     A = index + 0x50 -> RAM pointer
-        mov     R1,A                ; F9        R1 -> 0x50.. (axis current-pos)
-        mov     0x29,#0x40          ; 75 29 40  editor sub-state 0x40
-        ; ... handler continues (POSITION-mode axis select, digit entry, the
-        ;     MARK/GOTO/IF/OUT/TIM/POS instruction compilers, RUN/STOP, and the
-        ;     NVRAM program writer at DPH=3Eh/5800H). NOT yet annotated in this
-        ;     pass — see docs/ and hardware/teachbox/board.md for the overview,
-        ;     and treat the [INFER] labels above as provisional. [INFER]
+
+kh_ax_lo:
+        jnc     kh_0cb2             ; 50 0F     index-1 > 0x0A -> higher-key dispatch
+        ; ================= AXIS SELECT (POSITION mode) ======================
+        ; Here A = keyindex-1 and is in 0x00..0x09. A second DEC gives the axis
+        ; number; axes 0..5 are valid. Verified in ucSim:
+        ;   key index 2 -> axis 0 -> R1 = 0x50
+        ;   key index 3 -> axis 1 -> R1 = 0x51
+        ;   key index 7 -> axis 5 -> R1 = 0x55
+        ; i.e. axis = keyindex - 2, R1 = 0x50 + axis (pointer to that axis's
+        ; current-position slot 0x50..0x55), and mode 0x29 := 0x40.        [BYTE]
+        dec     A                   ; 14        A = keyindex - 2 = axis number
+        cjne    A,#0x06,$+3         ; B4 06 00  set/clear C for the < 6 test
+        jnc     kh_0d23             ; 50 7A     axis >= 6 -> not an axis key
+        setb    0x2A.5              ; D2 55     bit 0x55 = 0x2A.5: "axis selected" [INFER]
+        add     A,#0x50             ; 24 50     A = axis + 0x50  -> RAM pointer
+        mov     R1,A                ; F9        R1 -> current position of this axis
+        mov     0x29,#0x40          ; 75 29 40  mode 0x29 = 0x40 (POSITION mode) [BYTE]
+        ; ... POSITION-mode entry established. The subsequent digit entry
+        ;     (POS a . n) and the +/- jog that writes the axis target and drives
+        ;     the motion executor (8255 Port A/C -> L293) continue past here and
+        ;     are NOT annotated in this pass. [INFER]
+
+;------------------------------------------------------------------------------
+; Exit/other-branch stubs referenced above (targets confirmed, bodies [INFER]).
+;------------------------------------------------------------------------------
+        ; kh_0cb1 (0x0CB1): RET (a bare exit target of `jb 0x2A.6`).
+        ; kh_0cea (0x0CEA): arg-entry-busy branch.
+        ; kh_0cb2 (0x0CB2): higher key-index dispatch (command keys).
+        ; kh_0d23 (0x0D23): "not an axis key" / fall-through dispatch.
+kh_ret:
+        ; label alias for 0x0CB1 (RET); real byte at 0x0CB1 = 0x22.
 
 ;==============================================================================
 ; NOTES / OPEN ITEMS
@@ -196,9 +225,12 @@ kh_0ca1:
 ;   flags 0x20.5/0x20.6. (0x0BFF is a padding byte; callers enter at 0x0C00.)
 ; - The 25 physical keys map to indices 0x00..0x18; index 0x19 is a sentinel
 ;   used by the event path (0x0C64).
-; - kbd_handle (entry 0x0C80; 0x0C7F is padding) is only annotated at the
-;   prologue. It first does DEC A (0-basing the index) then dispatches. The
-;   concrete key indices (which index is RUN/STOP/POS/…) should be pinned by
-;   tracing the dispatch tables and cross-referencing the key layout in
-;   hardware/teachbox/board.md; several labels above are [INFER].
+; - kbd_handle (entry 0x0C80; 0x0C7F is padding): the AXIS-SELECT path is now
+;   [BYTE]-verified — key index 2..7 selects axis 0..5, sets R1 = 0x50+axis and
+;   mode 0x29 = 0x40 (POSITION), implementing the manual's "numeric key selects
+;   the axis" (hardware/teachbox/README.md). Watch the byte-vs-bit gotcha: the
+;   `jb/setb 0x55/0x56/0x57` operands are BITS of byte 0x2A, not RAM bytes.
+; - Still [INFER] / not annotated: the +/- jog + POS-digit entry that writes the
+;   axis target and calls the motion executor (8255 Port A/C -> L293), and the
+;   MARK/GOTO/IF/OUT/TIM/RUN/STOP command handlers.
 ;==============================================================================

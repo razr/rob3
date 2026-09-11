@@ -145,6 +145,22 @@ This validates the 3-group × 8-row index mapping (indices `0x00..0x18` for the
 25 keys) without needing the full multi-pass debounce, which requires the real
 8255 row hardware.
 
+### Axis select (kbd_handle POSITION mode, entry 0x0C80)
+
+Also asserts the manual's "press a numeric key to select the axis" behaviour
+(`hardware/teachbox/README.md`). Feeds a key index into `kbd_handle` (0x0C80),
+breaks at the axis-select RET (0x0C0B1), and checks the axis pointer + mode:
+
+| # | key index (A) | axis | Expected R1 | Expected 0x29 |
+| :- | :------------ | :--- | :---------- | :------------ |
+| 5 | `0x02` | 0 | `0x50` | `0x40` (POSITION) |
+| 6 | `0x03` | 1 | `0x51` | `0x40` |
+| 7 | `0x07` | 5 | `0x55` | `0x40` |
+
+i.e. axis = keyindex − 2, R1 = 0x50 + axis (that axis's current-position slot).
+Byte `0x2A` (which holds the bit-addressed gate flags 0x55/0x56/0x57) is cleared
+so the axis path is taken.
+
 **Simulator command (per case)**
 
 ```
