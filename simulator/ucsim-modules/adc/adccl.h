@@ -5,6 +5,13 @@
  * end-of-conversion (EOC) line is wired to the 8031 INT1 pin, so a finished
  * conversion fires the axis-servo ISR (EXT1 vector 0x0013 -> 0x00C0).
  *
+ * SCOPE: this module is a PURE SENSOR + interrupt source. It holds no physics
+ * -- just the currently selected channel and a per-channel value cache that is
+ * written from OUTSIDE (the plant/harness/bridge). The motor + joint + pot
+ * dynamics ("how far the motor moved the axis") live outside ucSim; see
+ * ../../harness/ARCHITECTURE.md. cl_adc only serves whatever pot value it was
+ * last given and raises EOC -> INT1.
+ *
  * See adc.cc for the full behavioral contract.
  */
 
@@ -21,19 +28,18 @@
 class cl_adc: public cl_hw
 {
 public:
-  /* modelled analog inputs, one per ADC channel (only 0..5 used = 6 axes) */
-  t_mem feedback[ROB3_ADC_NCH];
+  /* Per-channel pot value cache. NOT physics: this is only what the external
+   * plant/harness last wrote for each channel. cl_adc serves it back on a
+   * feedback read. Channels 0..5 = the six axes. */
+  t_mem pot[ROB3_ADC_NCH];
 
   int   channel;         /* channel currently selected (last write to 0x5800) */
   int   conv_delay;      /* cycles a conversion takes before EOC              */
   int   conv_countdown;  /* cycles left until EOC; <0 => idle, no conversion  */
-  bool  closed_loop;     /* integrate feedback from the L293 motor bits       */
 
-  /* registered cells */
+  /* registered cells (the two ADC bus windows + TCON for the EOC interrupt) */
   class cl_memory_cell *cell_adc_lo;  /* XRAM 0x5800 (channel sel / A8=0)  */
   class cl_memory_cell *cell_adc_hi;  /* XRAM 0x5900 (feedback / A8=1)     */
-  class cl_memory_cell *cell_porta;   /* XRAM 0x5000 (8255 Port A, L293 #1/#2) */
-  class cl_memory_cell *cell_portc;   /* XRAM 0x5200 (8255 Port C, L293 #3)    */
   class cl_memory_cell *cell_tcon;    /* SFR  0x88   (TCON; IE1 = EOC->INT1)   */
 
 public:
@@ -49,7 +55,6 @@ public:
 
 private:
   void start_conversion(int ch);
-  void integrate_arm(void);
 };
 
 #endif

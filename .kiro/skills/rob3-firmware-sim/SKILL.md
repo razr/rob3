@@ -233,28 +233,41 @@ module.
 A compiled ucSim peripheral (`cl_adc : cl_hw`, `HW_PORT`) that models the
 ADC0808/0809 so the ROM **free-runs from `reset; run`** instead of stalling at
 the `0x0680` ADC/INT1 gate. This replaces the `sim_run.sh` hand-injection of
-IRAM `0x22`.
+IRAM `0x22`. It is a **pure sensor + interrupt source** — no physics.
 
-- **Registered cells:** XRAM `0x5800`/`0x5900` (ADC windows), `0x5000`/`0x5200`
-  (8255 Port A/C motor bits, for the opt-in closed loop), and SFR `TCON` (0x88).
+- **Registered cells:** XRAM `0x5800`/`0x5900` (ADC windows) and SFR `TCON`
+  (0x88). (It does **not** touch Port A/C — motor physics is external, see
+  below.)
 - **write(0x5800):** latch `channel = val & 7`, arm an EOC countdown.
-- **read(0x5800/0x5900):** return `feedback[channel]` (the modelled pot).
+- **read(0x5800/0x5900):** return `pot[channel]` (whatever the plant last set).
 - **tick():** when the countdown expires, assert **EOC → INT1 by setting
   TCON.IE1 (0x08)**. The core's external-#1 it-source then vectors
   `0x0013 → 0x00C0` when EA+EX1 are set — the real EOC→INT1 wiring, no injection.
-- **Command:** `set hardware adc <ch> <value>` (seed a channel),
-  `set hardware adc <0|1>` (toggle the L293→arm integrator), `set hardware adc`
-  (print state).
+- **Command:** `set hardware adc <ch> <value>` (plant pushes a pot reading),
+  `set hardware adc` (print state).
 
 Verified (`simulator/tests/sim_adc.sh`, opt-in like the teachbox module): with
 only `P3.0=0` (fixed baud), `reset; run` reaches the main loop `0x074D`; the
-servo ISR `0x00C0` fires naturally; a seeded feedback byte flows through the
-ISR's `MOVX A,@DPTR` (0x00D8) into ACC.
+servo ISR `0x00C0` fires naturally; a pushed pot byte flows through the ISR's
+`MOVX A,@DPTR` (0x00D8) into ACC.
 
-> The closed-loop integrator uses an **[INFER]** L293 bit→direction map (coarse
-> ±1 step) — demonstrates the loop closing, not certified servo dynamics. The
-> EOC→INT1 trigger and open-loop feedback (the free-run enablers) are solid; a
-> faithful arm still needs the servo accel/decel algorithm reverse-engineered.
+### Architecture: ucSim = bus chips, plant = external
+
+The motor/joint/pot physics is **not** in ucSim — the L293/motor/joint/pot are
+not on the 8031 bus. Only the ADC (and the 8255, via XRAM today) are modelled.
+The firmware↔world contract is just **`motor[6]` out** (8255 Port A/C
+`0x5000`/`0x5200`) and **`pot[6]` in** (served by `cl_adc`), so any plant — a
+Python model, ROS2/Gazebo/Isaac, or the real bench — can sit behind a bridge
+with no firmware change. Full rationale + the layered plan:
+`simulator/harness/ARCHITECTURE.md`.
+
+> **Direction bit-map is still `[INFER]`.** A trace established that the servo
+> compares an accel/decel-*transformed* target (`R4`, not the raw `0x40+N`) to
+> the feedback at `0x00EE`, and with a static pot the ISR never reaches the
+> motor-write `MOVX` at `0x01C2` (it exits toward `0x0154`). So which Port A/C
+> bit pattern raises vs lowers a pot cannot be extracted by simple probing —
+> it needs the stateful accel/decel algorithm reverse-engineered first. The
+> EOC→INT1 trigger and open-loop feedback (the free-run enablers) are solid.
 
 ## Reading failures (ROB3 quick triage)
 
