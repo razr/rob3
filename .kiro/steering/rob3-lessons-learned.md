@@ -34,7 +34,7 @@ takes the "hit" path immediately, so the scan never advances.
 - **Fix (in the teachbox `cl_hw` module):** the P1 `read()` override must drive
   the three column bits itself — clear them (idle LOW) and set only the pressed
   key's bit — rather than OR-ing onto the raw `0xFF` cell value.
-  See `firmware/sim/ucsim-module/`.
+  See `simulator/ucsim-modules/teachbox/`.
 
 ## 8051 disassembly / annotation
 

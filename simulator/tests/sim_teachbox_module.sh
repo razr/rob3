@@ -10,7 +10,7 @@
 # on the strobed row that matches <row>, i.e. at strobe 0x46 == (row<<4).
 #
 # This REQUIRES the custom ucsim_51 built with the teachbox module (see
-# ../ucsim-module/README.md). It is OPT-IN: if that binary is not found the
+# ../ucsim-modules/README.md). It is OPT-IN: if that binary is not found the
 # test SKIPS (exit 0) so the default `make test` on a stock s51 still passes.
 #
 # Point it at the binary via UCSIM_51=/path/to/ucsim_51, or it probes:
@@ -31,7 +31,7 @@ find_ucsim51() {
 UCSIM_51="$(find_ucsim51)"
 if [[ -z "$UCSIM_51" ]]; then
   echo "SKIP  sim_teachbox_module: custom ucsim_51 (teachbox cl_hw) not found"
-  echo "      build it per ../ucsim-module/README.md, or set UCSIM_51=/path/to/ucsim_51"
+  echo "      build it per ../ucsim-modules/README.md, or set UCSIM_51=/path/to/ucsim_51"
   echo "sim_teachbox_module: SKIPPED"
   exit 0
 fi

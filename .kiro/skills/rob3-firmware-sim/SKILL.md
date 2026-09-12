@@ -11,7 +11,7 @@ description: >
   ROB3 8031 firmware and its ucSim test rig.
 metadata:
   origin: ROB3
-  globs: ["firmware/**", "**/*.a51", "**/*.hex", "**/sim/**", "firmware/sim/ucsim-module/**"]
+  globs: ["firmware/**", "simulator/**", "**/*.a51", "**/*.hex", "simulator/ucsim-modules/**"]
 ---
 
 # ROB3 Firmware Build & Simulation Workflow
@@ -51,7 +51,7 @@ the generated `.a51`**; edit the annotated `.asm` and regenerate.
 The main loop, ISRs, serial protocol, and motion interpreter are **not yet
 transcribed**.
 
-## Makefile targets (`cd firmware`)
+## Makefile targets (`cd simulator`)
 
 | Target | Description |
 | :----- | :---------- |
@@ -61,8 +61,8 @@ transcribed**.
 | `make sim-run` | Behavioral: inject the gates, run to end of init `0x074B` into the main loop. |
 | `make sim-teachbox` | Behavioral: run the keypad scanner, assert key decode. |
 | `make test` | `verify` + all `sim-*`. |
-| `make gen` | Regenerate the byte-exact `.a51` sources from the ROM (via `sim/gen_init.py`). |
-| `make clean` | Remove `sim/build/`. |
+| `make gen` | Regenerate the byte-exact `.a51` sources from the ROM (via `gen_init.py`). |
+| `make clean` | Remove `build/`. |
 | `make help` | List targets. |
 
 Overridable vars (e.g. macOS): `make OBJCOPY=gobjcopy verify`,
@@ -77,11 +77,12 @@ console and **segfaults** (symptom: "banner only, no output", core dump under a
 pty). This is *not* a curses problem. **Always run against an `@`-free copy:**
 
 ```bash
-cp firmware/hex/M2764A@DIP28.HEX sim/build/rob3.hex
-s51 -t 51 -X 11.0592M sim/build/rob3.hex
+cp firmware/hex/M2764A@DIP28.HEX simulator/build/rob3.hex
+s51 -t 51 -X 11.0592M simulator/build/rob3.hex
 ```
 
-The Makefile does this copy for you (`$(SAFEHEX) = sim/build/rob3.hex`).
+The Makefile does this copy for you (`$(SAFEHEX) = build/rob3.hex`, relative to
+`simulator/`).
 
 ## Verified firmware ↔ hardware landmarks
 
@@ -95,7 +96,7 @@ padding decodes as `MOV R7,A` and shifts boundaries):
 - Keypad P1 read at **`0x0C0F`** (`MOV A,0x90`); row strobe written near
   **`0x0C0C`**; `sim_teachbox.sh` breaks at **`0x0C2A`**.
 
-Expected asserted init state (from `BUILD.md` / `sim/tests`):
+Expected asserted init state (from `simulator/BUILD.md` / `simulator/tests`):
 `SP=0x31`, `TMOD=0x21`, `SCON=0x50`, `IE=0x84` (EA+EX1) at the gate;
 axis mask `IRAM[0x22]=0x01`, output shadow `IRAM[0x47]=0xFF`; after the run
 path `IE=0x07` and axis speed table `IRAM[0x48..0x4D]=01×6`.
@@ -143,9 +144,9 @@ the servo ISR run → read commanded motor bits from `0x5000/0x5200` → integra
 repeat. **The blocker for a faithful closed loop is the *stateful* servo
 algorithm** (accumulated per-axis workspace `0x78+` and bank-1 state across
 successive ISR invocations), not the sim plumbing — see
-`firmware/sim/harness/README.md`.
+`simulator/harness/README.md`.
 
-## Python batch harness (`firmware/sim/harness/ucsim.py`)
+## Python batch harness (`simulator/harness/ucsim.py`)
 
 `UCSimBatch` runs `s51` once per "transaction" and parses `dump`/`Stop at`
 output. State that must persist across transactions is re-seeded at the top of
@@ -168,7 +169,7 @@ val = UCSimBatch.parse_dump_byte(out, 0x58)      # -> int, or -1 if not found
 Helpers: `parse_dump_byte`, `parse_dump_row`, `parse_stopped_pc`. The driver
 strips ucSim's ANSI `\x1b[0K` sequences and auto-appends `quit`.
 
-## The teachbox `cl_hw` module (`firmware/sim/ucsim-module/`)
+## The teachbox `cl_hw` module (`simulator/ucsim-modules/teachbox/`)
 
 A compiled ucSim peripheral (`cl_teachbox : cl_hw`, `HW_GPIO`) that models the
 ROB3 Teachbox 5×5 key matrix + LEDs so the real firmware's `kbd_scan` reads a
@@ -222,10 +223,38 @@ pattern and `0x47` the LED/row latch — distinct bytes; `sim_teachbox.sh` seeds
 Verified end-to-end with the compiled module: pressing row R makes `kbd_scan`
 see the column only at strobe `0x46 == (R<<4)` for R = 0..7, all three groups
 decode, and release yields no hit. Covered by
-`firmware/sim/tests/sim_teachbox_module.sh` (opt-in: needs the custom
+`simulator/tests/sim_teachbox_module.sh` (opt-in: needs the custom
 `ucsim_51`; skips gracefully otherwise). The P1-injection scanner/handler test
-`firmware/sim/tests/sim_teachbox.sh` covers the index/handler decode without the
+`simulator/tests/sim_teachbox.sh` covers the index/handler decode without the
 module.
+
+## The ADC `cl_hw` module (`simulator/ucsim-modules/adc/`) — free-run enabler
+
+A compiled ucSim peripheral (`cl_adc : cl_hw`, `HW_PORT`) that models the
+ADC0808/0809 so the ROM **free-runs from `reset; run`** instead of stalling at
+the `0x0680` ADC/INT1 gate. This replaces the `sim_run.sh` hand-injection of
+IRAM `0x22`.
+
+- **Registered cells:** XRAM `0x5800`/`0x5900` (ADC windows), `0x5000`/`0x5200`
+  (8255 Port A/C motor bits, for the opt-in closed loop), and SFR `TCON` (0x88).
+- **write(0x5800):** latch `channel = val & 7`, arm an EOC countdown.
+- **read(0x5800/0x5900):** return `feedback[channel]` (the modelled pot).
+- **tick():** when the countdown expires, assert **EOC → INT1 by setting
+  TCON.IE1 (0x08)**. The core's external-#1 it-source then vectors
+  `0x0013 → 0x00C0` when EA+EX1 are set — the real EOC→INT1 wiring, no injection.
+- **Command:** `set hardware adc <ch> <value>` (seed a channel),
+  `set hardware adc <0|1>` (toggle the L293→arm integrator), `set hardware adc`
+  (print state).
+
+Verified (`simulator/tests/sim_adc.sh`, opt-in like the teachbox module): with
+only `P3.0=0` (fixed baud), `reset; run` reaches the main loop `0x074D`; the
+servo ISR `0x00C0` fires naturally; a seeded feedback byte flows through the
+ISR's `MOVX A,@DPTR` (0x00D8) into ACC.
+
+> The closed-loop integrator uses an **[INFER]** L293 bit→direction map (coarse
+> ±1 step) — demonstrates the loop closing, not certified servo dynamics. The
+> EOC→INT1 trigger and open-loop feedback (the free-run enablers) are solid; a
+> faithful arm still needs the servo accel/decel algorithm reverse-engineered.
 
 ## Reading failures (ROB3 quick triage)
 

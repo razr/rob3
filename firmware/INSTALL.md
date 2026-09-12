@@ -1,18 +1,19 @@
 # INSTALL
 
 Toolchain prerequisites for assembling and simulating the ROB3 firmware init
-sequence (see `BUILD.md` for how to actually build and test).
+sequence (see [`../simulator/BUILD.md`](../simulator/BUILD.md) for how to
+actually build and test).
 
 ## What you need
 
 | Tool | Provides | Used for |
 | :--- | :------- | :------- |
-| `sdas8051` | SDCC 8051 assembler | assemble `sim/init.a51` |
+| `sdas8051` | SDCC 8051 assembler | assemble `simulator/init.a51` |
 | `sdld` | SDCC linker (ASlink) | link `.rel` → Intel HEX |
 | `objcopy` | GNU binutils | Intel HEX → raw binary |
 | `s51` | ucSim 8051 simulator | run the ROM, behavioral tests |
 | `make` | GNU Make | drive the build/test targets |
-| `python3` | Python 3 | regenerate `sim/init.a51` (`make gen`) |
+| `python3` | Python 3 | regenerate `simulator/init.a51` (`make gen`) |
 
 `sdas8051` and `sdld` ship in the **sdcc** package; `s51` ships in the
 **ucsim** package.
@@ -56,7 +57,7 @@ sudo dnf install -y sdcc binutils make python3
 brew install sdcc binutils make python3
 # Homebrew's sdcc includes the ucSim simulators (s51).
 # Homebrew binutils installs as gobjcopy; either symlink it to objcopy on
-# PATH or edit OBJCOPY in the Makefile (see BUILD.md).
+# PATH or edit OBJCOPY in the Makefile (see ../simulator/BUILD.md).
 ```
 
 ### From source (SDCC + ucSim)
@@ -76,14 +77,16 @@ make --version
 python3 --version
 ```
 
-All five must resolve on your `PATH`. Then proceed to `BUILD.md`.
+All five must resolve on your `PATH`. Then proceed to
+[`../simulator/BUILD.md`](../simulator/BUILD.md).
 
 ## Troubleshooting
 
 - **`s51: command not found`** — install `ucsim` (or `sdcc-ucsim`). It is not
   always pulled in by `sdcc`.
 - **`objcopy: command not found` (macOS)** — Homebrew names it `gobjcopy`.
-  Symlink it or set `OBJCOPY=gobjcopy` when invoking `make` (see BUILD.md).
+  Symlink it or set `OBJCOPY=gobjcopy` when invoking `make` (see
+  ../simulator/BUILD.md).
 - **Filename with `@`** — the shipped ROM image is `hex/M2764A@DIP28.HEX`. The
-  Makefile copies it to a shell-safe `sim/build/rob3.hex` automatically; you do
-  not need to rename anything by hand.
+  Makefile copies it to a shell-safe `simulator/build/rob3.hex` automatically;
+  you do not need to rename anything by hand.

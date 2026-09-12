@@ -1,9 +1,10 @@
-# firmware/sim/tests
+# simulator/tests
 
 Behavioral tests for the annotated ROB3 firmware regions. Each script runs the
-**real ROM** (`../../hex/M2764A@DIP28.HEX`) in the ucSim `s51` simulator and
-asserts that runtime behavior matches the annotated listings
-(`../../src/annotated/main.annotated.asm`, `../../src/annotated/teachbox.annotated.asm`).
+**real ROM** (`../../firmware/hex/M2764A@DIP28.HEX`) in the ucSim `s51`
+simulator and asserts that runtime behavior matches the annotated listings
+(`../../firmware/src/annotated/main.annotated.asm`,
+`../../firmware/src/annotated/teachbox.annotated.asm`).
 
 These complement the *golden byte-match* tests (`make verify`), which prove the
 transcriptions equal the ROM. These prove the ROM *behaves* as annotated.
@@ -14,16 +15,17 @@ Normally via the Makefile one level up (it prepares a shell-safe HEX copy and
 sets the environment):
 
 ```bash
-cd firmware
+cd simulator
 make sim-init      # runs tests/sim_init.sh     (init sequence)
 make sim-run       # runs tests/sim_run.sh       (init past the ADC/INT1 gate)
 make sim-teachbox  # runs tests/sim_teachbox.sh  (keypad scanner decode, P1 injection)
 make sim-teachbox-module  # runs tests/sim_teachbox_module.sh (compiled teachbox cl_hw; opt-in)
+make sim-adc       # runs tests/sim_adc.sh (compiled adc cl_hw: free-run past the ADC/INT1 gate; opt-in)
 make test          # golden (init+teachbox) + all behavioral tests
 ```
 
 > `sim-teachbox-module` exercises the **compiled** ucSim teachbox peripheral
-> (`../ucsim-module/`) with `set hardware teachbox <row> <group>` instead of
+> (`../ucsim-modules/teachbox/`) with `set hardware teachbox <row> <group>` instead of
 > injecting P1. It needs the custom `ucsim_51` (point at it with
 > `UCSIM_51=/path/to/ucsim_51`, or it auto-probes PATH and the default source
 > build dir) and **skips** cleanly if that binary isn't present, so a stock-s51
@@ -32,10 +34,10 @@ make test          # golden (init+teachbox) + all behavioral tests
 Standalone (must provide the env vars the scripts expect):
 
 ```bash
-cd firmware
-cp hex/M2764A@DIP28.HEX sim/build/rob3.hex
-SAFEHEX=sim/build/rob3.hex SIM=s51 SIMFLAGS="-t 51 -X 11.0592M" \
-  sim/tests/sim_init.sh
+cd simulator
+cp ../firmware/hex/M2764A@DIP28.HEX build/rob3.hex
+SAFEHEX=build/rob3.hex SIM=s51 SIMFLAGS="-t 51 -X 11.0592M" \
+  tests/sim_init.sh
 ```
 
 ### Environment / knobs
@@ -131,7 +133,7 @@ dump iram 0x48 0x55 ; dump sfr 0xa8 0xa8
 ## `sim_teachbox.sh` — keypad scanner decode
 
 **Premise.** Run the Teachbox keypad scanner `kbd_scan` (entry `0x0C00`, see
-`../../src/annotated/teachbox.annotated.asm`) and prove it decodes the column-group bits
+`../../firmware/src/annotated/teachbox.annotated.asm`) and prove it decodes the column-group bits
 into the documented key-index bases. The scanner strobes matrix rows via the
 8255 (unmodeled here) and reads the three column groups from **P1 (SFR 0x90)**,
 top 3 bits.
@@ -207,10 +209,31 @@ break 0x0c2a ; run        # read R6 at the stop (index base)
 - **Wrong `IE`/register values** — confirm `SIMFLAGS` uses `-t 51` and the
   11.0592 MHz XTAL; a different CPU type can change SFR decoding.
 
+## `sim_adc.sh` — free-run past the ADC/INT1 gate (compiled `cl_adc`, opt-in)
+
+**Premise.** With the **`cl_adc`** peripheral compiled into a custom `ucsim_51`
+(see `../ucsim-modules/adc/`), the modelled ADC asserts EOC → INT1, so the ROM no
+longer stalls at `0x0680`. This test proves the ROM **free-runs from
+`reset; run`** — the only injected condition is `P3.0 = 0` (a serial-line
+choice for the fixed-baud path, not an ADC one).
+
+**Assertions.**
+1. Free-run reaches the main loop `0x074D` (no hand-injected ADC/INT1 stimulus).
+2. The axis-servo ISR (`0x00C0`) fires on its own from a natural EOC → INT1.
+3. A seeded feedback value flows through the ISR's `MOVX A,@DPTR` read
+   (`set hardware adc <ch> 0x5A` → ACC = `0x5A` right after `0x00D8`).
+
+**Opt-in.** Like `sim_teachbox_module.sh`, it needs the custom `ucsim_51`
+(`UCSIM_51=/path/to/ucsim_51`, or it probes PATH and the default source-build
+dir) and **skips** cleanly if that binary or the `adc` element is absent, so a
+stock-`s51` `make test` still passes. Contrast with `sim_run.sh`, which gets the
+same end state on *stock* `s51` by hand-injecting the gate — `sim_adc.sh` shows
+the real device doing it instead.
+
 ## Scope
 
 These tests cover the annotated regions: the **init sequence** (`0x0600`–
 `0x074C`) and the **Teachbox keypad scanner** (`0x0C00`–`0x0C6B`). The main
 loop, ISRs, serial protocol, motion interpreter, and the rest of the Teachbox
-key handler (`0x0C80`+) are not exercised here. See `../../BUILD.md` for the
+key handler (`0x0C80`+) are not exercised here. See `../BUILD.md` for the
 overall build/verify pipeline and `../README.md` for the directory layout.

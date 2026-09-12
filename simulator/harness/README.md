@@ -1,4 +1,4 @@
-# firmware/sim/harness
+# simulator/harness
 
 Foundation for a **closed-loop** ROB3 simulation: drive the real ROM in ucSim
 while modelling the board peripherals (ADC feedback + L293 motor outputs) so the
@@ -56,7 +56,7 @@ axis-select, and `kh_jog` work into a "type keys, watch the axis" demo.
 ### Update: a real ucSim teachbox HW module now exists
 
 Rather than the breakpoint-injection approach, a genuine compile-time ucSim
-peripheral was written — see `../ucsim-module/` (`teachbox.cc`/`teachboxcl.h`
+peripheral was written — see `../ucsim-modules/teachbox/` (`teachbox.cc`/`teachboxcl.h`
 + README). It builds into a custom `ucsim_51`, registers as `HW_GPIO`, and
 responds to `set hardware teachbox <row> <group>`. Its strobe→row decode is
 calibrated and verified (`row = strobe >> 4`); a press is detected by the real
@@ -66,7 +66,7 @@ calibrated and verified (`row = strobe >> 4`); a press is detected by the real
 ## Verified: XRAM is the peripheral window
 
 The board's memory-mapped peripherals live in the 8031 external data space
-(`MOVX @DPTR`), selected by DPH (see `../../src/annotated/main.annotated.asm` and
+(`MOVX @DPTR`), selected by DPH (see `../../firmware/src/annotated/main.annotated.asm` and
 `hardware/board/74LS138.md`). Crucially, **ucSim `s51` exposes writable XRAM at
 those addresses**, so we can model peripherals by seeding/reading XRAM — no
 mid-run interception needed:

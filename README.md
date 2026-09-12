@@ -18,7 +18,7 @@ What exists in this repository today:
   the teach-pendant keypad scanner (`0x0C00–`), byte-verified against the ROM.
 - **Two-layer verification** — a *golden byte-match* (assembled transcription
   `cmp`'d against the ROM) plus *behavioral ucSim tests* (the real ROM run in
-  `s51` with runtime state asserted). Driven by `firmware/Makefile` (`make test`).
+  `s51` with runtime state asserted). Driven by `simulator/Makefile` (`make test`).
 - **Hardware reference docs** for every board IC, plus a compiled **ucSim
   teach-pendant peripheral** (`cl_hw` module) for closer-to-real simulation.
 - **Arduino bench bring-up rigs** that recreate the teachbox and a single robot
@@ -39,12 +39,17 @@ rob3/
 ├── README.md                         # this file
 ├── ROB3_FIRMWARE_REENGINEERING.md    # project charter: goals, scope, success criteria
 ├── LICENSE
-├── firmware/                         # the firmware itself + build/verify/sim rig
+├── firmware/                         # the firmware itself (ROM + disassembly + annotations)
 │   ├── bin/ hex/                      #   ROM image (binary + Intel HEX)
 │   ├── src/                           #   raw disasm (main.asm) + annotated/ (*.annotated.asm)
-│   ├── sim/                           #   byte-exact .a51 sources, ucSim tests, teachbox cl_hw module
+│   ├── INSTALL.md                     #   toolchain prerequisites
+├── simulator/                        # build / verify / simulate rig (drives ../firmware)
 │   ├── Makefile                       #   verify / sim-* / gen targets
-│   ├── INSTALL.md  BUILD.md           #   toolchain + build/test guide
+│   ├── BUILD.md                       #   build/test guide
+│   ├── *.a51                           #   byte-exact ROM-region sources (golden DUT)
+│   ├── tests/                          #   ucSim behavioral tests
+│   ├── harness/                        #   Python batch driver + closed-loop foundation
+│   ├── ucsim-modules/                  #   compiled cl_hw peripherals (teachbox/, adc/)
 ├── hardware/                         # board reverse-engineering
 │   ├── board/                         #   per-chip docs (8031, 8255, 74LS138, EPROM, SRAM, ADC, L293, ...)
 │   ├── teachbox/  motors/  connectors/#   subsystem docs + Arduino bring-up sketches
@@ -62,7 +67,7 @@ Install the toolchain (SDCC `sdas8051`/`sdld`, ucSim `s51`, binutils, make,
 python3) — see [`firmware/INSTALL.md`](firmware/INSTALL.md) for per-OS steps.
 
 ```bash
-cd firmware
+cd simulator
 make          # golden byte-match: assembled transcription == ROM slice (prints SHA-256)
 make test     # golden byte-match + ucSim behavioral tests
 make help     # list all targets (verify / sim-init / sim-run / sim-teachbox / gen)
@@ -70,8 +75,8 @@ make help     # list all targets (verify / sim-init / sim-run / sim-teachbox / g
 
 > **ucSim `@`-filename gotcha:** the shipped ROM is `hex/M2764A@DIP28.HEX`, and
 > the `@` crashes `s51` (it parses `file@memoryspace`). The Makefile copies the
-> image to a shell-safe `sim/build/rob3.hex` automatically — you never need to
-> rename anything by hand.
+> image to a shell-safe `simulator/build/rob3.hex` automatically — you never
+> need to rename anything by hand.
 
 ## Hardware at a glance
 
@@ -113,7 +118,7 @@ established, and unproven claims are kept separate from verified ones:
 ## Documentation & skills
 
 - **Charter / full spec:** [`ROB3_FIRMWARE_REENGINEERING.md`](ROB3_FIRMWARE_REENGINEERING.md)
-- **Firmware build & tests:** [`firmware/BUILD.md`](firmware/BUILD.md), [`firmware/INSTALL.md`](firmware/INSTALL.md)
+- **Firmware build & tests:** [`simulator/BUILD.md`](simulator/BUILD.md), [`firmware/INSTALL.md`](firmware/INSTALL.md)
 - **Analysis docs:** [`docs/`](docs/) — RE notes, SFR/8255 maps, axis state machine
 - **Hardware docs:** [`hardware/`](hardware/) — per-chip board reference, teachbox, motors, connectors
 - **Agent skills:** [`.kiro/skills/`](.kiro/skills/) — generic (`mcs51-assembly`,
