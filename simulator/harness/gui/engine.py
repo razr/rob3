@@ -69,29 +69,55 @@ def _probe_modules(binary: str) -> bool:
     return "adc[" in out
 
 
-def _safe_hex() -> str:
-    """Return a shell-safe (@-free) copy of the ROM under simulator/build/."""
+def default_hex() -> str:
+    """The default ROM path (repo firmware/hex/M2764A@DIP28.HEX).
+
+    Overridable by the ROB3_HEX environment variable.
+    """
+    env = os.environ.get("ROB3_HEX")
+    if env:
+        return os.path.expanduser(env)
+    here = os.path.dirname(os.path.abspath(__file__))
+    return os.path.normpath(os.path.join(
+        here, "..", "..", "..", "firmware", "hex", "M2764A@DIP28.HEX"))
+
+
+def _safe_hex(src: str | None = None) -> str:
+    """Return a shell-safe (@-free) copy of the ROM under simulator/build/.
+
+    `src` is the ROM to load; defaults to default_hex() (which honours the
+    ROB3_HEX env var). ucSim mis-parses '@' in a filename, so the ROM is
+    always copied to an @-free path before loading.
+    """
     here = os.path.dirname(os.path.abspath(__file__))
     build = os.path.normpath(os.path.join(here, "..", "..", "build"))
     os.makedirs(build, exist_ok=True)
     dst = os.path.join(build, "rob3.hex")
-    src = os.path.normpath(os.path.join(
-        here, "..", "..", "..", "firmware", "hex", "M2764A@DIP28.HEX"))
+    if src is None:
+        src = default_hex()
     if os.path.exists(src):
         shutil.copyfile(src, dst)
     return dst
 
 
 class UCSimEngine:
-    def __init__(self, xtal: str = "11.0592M"):
+    def __init__(self, xtal: str = "11.0592M", hex_path: str | None = None,
+                 console_port: int | None = None):
         self.binary, self.has_modules = find_ucsim()
-        self.hexf = _safe_hex()
+        self.hexf = _safe_hex(hex_path)
+        self.console_port = console_port
         # ucSim only emits its prompt on a TTY, so drive it through a pty.
         self.pid, self.fd = pty.fork()
         if self.pid == 0:  # child
-            os.execv(self.binary,
-                     [self.binary, "-t", "51", "-X", xtal, "-p", PROMPT,
-                      self.hexf])
+            argv = [self.binary, "-t", "51", "-X", xtal, "-p", PROMPT]
+            if console_port:
+                # -z: command console on localhost:<port> AND on stdio, so the
+                # CLI can still boot the ROM over its pty while a separate
+                # terminal attaches with `nc localhost <port>`.
+                # -b: black & white (no ANSI colour) so the nc stream is clean.
+                argv += ["-b", "-z", str(console_port)]
+            argv.append(self.hexf)
+            os.execv(self.binary, argv)
             os._exit(127)  # unreachable
         self._wait_prompt(timeout=5.0)   # consume banner up to first prompt
 
