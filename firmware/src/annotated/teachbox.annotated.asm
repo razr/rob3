@@ -144,6 +144,21 @@ key_hold_clear:
         ret                         ; 22
 
 ;------------------------------------------------------------------------------
+; (row, group) -> KEY INDEX map  (as returned in A to kbd_handle)      [SIM]
+;   Swept in ucSim (loopback module + release-then-hold): the scanner returns
+;       index = row + 1 + (group-1)*8       row 0..7, group 1..3
+;   i.e.  group 1: rows 0..7 -> 0x01..0x08
+;         group 2: rows 0..7 -> 0x09..0x10
+;         group 3: rows 0..7 -> 0x11..0x18
+;   kbd_handle then does DEC A (0-based). AXIS SELECT is index 0x02..0x07
+;   (group 1, rows 1..6) -> axis 0..5: verified each sets mode 0x29 = 0x40
+;   (POSITION) as annotated in kbd_handle. (The full POS-digit value-entry and
+;   commit sequence — pos_digit/pos_commit — depends on further editor state
+;   [0x29.3, 0x2A.x, the 0x6E:0x6D accumulator] and is not yet fully mapped as a
+;   black-box key sequence; the axis-select entry point is [SIM]-confirmed.)
+;------------------------------------------------------------------------------
+
+;------------------------------------------------------------------------------
 ; kbd_evt (0x0C64): keyboard-event branch taken when 0x20.1 was set. Loads a
 ; fixed index 0x19 (=25, one past the 25 keys 0..24), resets debounce state.
 ;------------------------------------------------------------------------------

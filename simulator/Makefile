@@ -48,7 +48,8 @@ SIMFLAGS   := -t 51 -X 11.0592M
 SAFEHEX    := $(BUILD)/rob3.hex
 
 .PHONY: all verify verify-init verify-teachbox \
-        sim-init sim-run sim-teachbox sim-teachbox-module sim-adc demo-teachbox test gen clean help
+        sim-init sim-run sim-teachbox sim-teachbox-module sim-adc \
+        sim-teachbox-axis demo-teachbox test gen clean help
 
 all: verify ## Default: assemble all regions and prove they match the ROM
 
@@ -110,12 +111,15 @@ sim-adc: $(SAFEHEX) ## Behavioral: free-run past the ADC/INT1 gate via the compi
 	@SAFEHEX=$(SAFEHEX) SIMFLAGS="$(SIMFLAGS)" \
 		$(SIMDIR)/tests/sim_adc.sh
 
+sim-teachbox-axis: $(SAFEHEX) ## Black-box: real keypad axis-select -> POSITION mode (needs teachbox+loopback cl_hw; skips w/o them)
+	@UCSIM_51="$(UCSIM_51)" python3 $(SIMDIR)/tests/test_teachbox_axis_select.py
+
 demo-teachbox: $(SAFEHEX) ## Demo: teachbox key press -> axis-select -> jog -> axis position moves (needs custom ucsim_51)
 	@SAFEHEX=$(SAFEHEX) SIMFLAGS="$(SIMFLAGS)" \
 		$(SIMDIR)/tests/demo_teachbox_axis.sh
 
 # ---- Aggregate ---------------------------------------------------------------
-test: verify sim-init sim-run sim-teachbox sim-teachbox-module sim-adc ## Run all tests (golden + behavioral)
+test: verify sim-init sim-run sim-teachbox sim-teachbox-module sim-adc sim-teachbox-axis ## Run all tests (golden + behavioral)
 	@echo "ALL TESTS PASSED"
 
 # ---- Regenerate the byte-exact sources from the ROM --------------------------
