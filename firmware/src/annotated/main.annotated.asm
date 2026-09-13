@@ -473,11 +473,17 @@ init_finish:
 ;
 ;   GATE 4  KEYPAD DEBOUNCE (in kbd_scan, 0x0C00).  Even with the scanner
 ;           called, a key is only ACCEPTED (→ kbd_handle) after it survives the
-;           two-stage debounce: first pass latches the index into 0x56 and arms
-;           the repeat timer 0x57 (=0x23) via key_changed, and only a later
-;           pass with the same held key returns a nonzero index. A single short
-;           press/step burst therefore latches 0x56 but never dispatches; the
-;           key must be HELD across enough scan passes.               [SIM]
+;           two-stage debounce. The accept path at 0x0C41 is guarded by
+;               30 06 1B   JNB 0x20.6, ret_zero
+;           so flag 0x20.6 ("ready for a new key") must be SET — and it is only
+;           set by the key_release path (SETB 0x20.6) when the scanner first
+;           sees NO key. So the required cadence is RELEASE → PRESS-and-HOLD:
+;           a release sets 0x20.6, then a held key is accepted a few scan passes
+;           later (≈3 passes / ~24k instructions in ucSim). Holding a key from
+;           reset without a prior release leaves 0x20.6 clear and the key is
+;           never dispatched.                                          [SIM]
+;           (Verified: idle-release first → 0x20 bit6 set → press row3/grp2 →
+;            kbd_handle reached at ~24000 stepped instructions.)
 ;
 ; SIM IMPLICATION: to exercise the real keypad path in ucSim you must present
 ; P3.2=1 and P3.4=1 (the "RS-232 shorting connector present" pin state) and

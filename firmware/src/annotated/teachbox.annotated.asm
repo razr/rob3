@@ -125,6 +125,20 @@ key_repeat:
 ret_zero:
         ret                         ; 22
 
+;------------------------------------------------------------------------------
+; DEBOUNCE ACCEPT PROTOCOL — required press cadence                    [SIM]
+;   The accept path is gated by `jnb 0x20.6, ret_zero` (0x0C41). Flag 0x20.6 is
+;   set ONLY by key_release (above), i.e. after the scanner sees NO key. So a
+;   key is dispatched to kbd_handle only in the sequence:
+;       RELEASE (scanner sets 0x20.6)  ->  PRESS + HOLD (same index across
+;       ~3 scan passes)  ->  accept, A = key index, call kbd_handle.
+;   Holding a key from reset with no prior release leaves 0x20.6 clear, so the
+;   index is latched into 0x56 (and 0x57 reloads to 0x23) but NEVER dispatched.
+;   Verified in ucSim (with the loopback module so the poll runs): idle-release
+;   first, then press row3/grp2 -> kbd_handle reached at ~24000 stepped
+;   instructions. This is the behaviour a black-box test harness must reproduce.
+;------------------------------------------------------------------------------
+
 key_hold_clear:
         clr     0x20.6              ; C2 06
         ret                         ; 22
