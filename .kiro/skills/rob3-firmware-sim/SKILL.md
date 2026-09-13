@@ -3,12 +3,15 @@ name: rob3-firmware-sim
 description: >
   ROB3-specific firmware build, verification, and simulation workflow: the
   two-layer golden-byte-match + behavioral-sim model, the Makefile targets
-  (verify / sim-init / sim-run / sim-teachbox / gen), the ucSim `@`-filename
-  segfault workaround, the XRAM peripheral-window seeding table, injected
-  hardware stimulus as test scaffolding, the compiled teachbox `cl_hw` module
-  and its strobe->row calibration, verified entry points/state, and the Python
-  batch harness. Use when building, verifying, simulating, or extending the
-  ROB3 8031 firmware and its ucSim test rig.
+  (verify / sim-init / sim-run / sim-teachbox / sim-teachbox-axis / gen), the
+  ucSim `@`-filename segfault workaround, the `run N` vs `step N` bounded-advance
+  gotcha, the XRAM peripheral-window seeding table, injected hardware stimulus as
+  test scaffolding, the compiled teachbox / adc / loopback `cl_hw` modules, the
+  P3.2/P3.4 emergency-off + poll gates that keep the sim teachbox silent, the
+  keypad (row,group)->index map and debounce release-then-hold protocol, verified
+  entry points/state, and the Python batch + interactive harnesses. Use when
+  building, verifying, simulating, or extending the ROB3 8031 firmware and its
+  ucSim test rig.
 metadata:
   origin: ROB3
   globs: ["firmware/**", "simulator/**", "**/*.a51", "**/*.hex", "simulator/ucsim-modules/**"]
@@ -60,6 +63,9 @@ transcribed**.
 | `make sim-init` | Behavioral: from reset, init **blocks at `0x0680`** (ADC EOC/INT1 wait) — correct with no ADC model. |
 | `make sim-run` | Behavioral: inject the gates, run to end of init `0x074B` into the main loop. |
 | `make sim-teachbox` | Behavioral: run the keypad scanner, assert key decode. |
+| `make sim-teachbox-module` | Behavioral: exercise the compiled teachbox `cl_hw` module (opt-in; skips w/o custom `ucsim_51`). |
+| `make sim-adc` | Behavioral: free-run past the ADC/INT1 gate via the compiled adc `cl_hw` module (opt-in). |
+| `make sim-teachbox-axis` | **Black-box** keypad axis-select → POSITION mode via the real scanner+handler (opt-in; needs teachbox **and** loopback modules). |
 | `make test` | `verify` + all `sim-*`. |
 | `make gen` | Regenerate the byte-exact `.a51` sources from the ROM (via `gen_init.py`). |
 | `make clean` | Remove `build/`. |
@@ -83,6 +89,28 @@ s51 -t 51 -X 11.0592M simulator/build/rob3.hex
 
 The Makefile does this copy for you (`$(SAFEHEX) = build/rob3.hex`, relative to
 `simulator/`).
+
+## CRITICAL gotcha — `run N` does NOT stop after N cycles; use `step N`
+
+In this ucSim build (`s51` / `ucsim_51`), `run <N>` **free-runs until
+interrupted** and ignores the count. For a *bounded* advance use `step <N>`,
+which reliably runs N instructions and returns immediately (reason `(109)
+resSTEP`), even while the ADC/INT1 servo ISR is active (~4.5 ms for 8000). A
+harness that issues `run 8000` per key therefore blocks for the whole read
+timeout (~20 s); `step 8000` returns in milliseconds. (This bit the interactive
+teachbox harness — see `UCSimEngine.run_cycles`.)
+
+Two related interactive-driving rules (both cost hours if missed):
+
+- **Never pipeline a command after a `run`/`step` in one console write.** ucSim
+  freezes the console during a run; a line already sitting in the input buffer
+  is consumed as a **user interrupt** (`stop(resUSER)` in newcmd.cc
+  `proc_input`) and **discarded without executing**. Send press, then `step N`
+  **alone**, then the release, as separate writes. Batching one write is only
+  safe with **no** run/step in it (e.g. the six `set hardware adc` pot pushes).
+- Bit reads (`JB`/`JNB`) go through the **`bits` address space**
+  (`bits->read(bitaddr)` in jmp.cc), *not* the SFR byte cell — relevant when a
+  `cl_hw` module tries to override a port bit (see the loopback module).
 
 ## Verified firmware ↔ hardware landmarks
 
@@ -269,6 +297,84 @@ with no firmware change. Full rationale + the layered plan:
 > it needs the stateful accel/decel algorithm reverse-engineered first. The
 > EOC→INT1 trigger and open-loop feedback (the free-run enablers) are solid.
 
+## Why the sim teachbox is silent — the P3 gates & the loopback module
+
+Pressing keys with `set hardware teachbox …` and letting the ROM run from a
+plain `reset; run` does **nothing** by default: no IRAM slot ever changes,
+because the firmware never reaches the main-loop keypad poll (`tb_poll`,
+`0x07C4`). A PC trace goes `0x074D → 0x0003 → 0x0040` and loops in
+`0x0047..0x0054`. There are **three sequential P3-input gates**, all conditioned
+on the real board by **MM74C04N #1** (needs the RS-232 shorting connector
+installed — see `hardware/board/MM74C04N.md`, `hardware/teachbox/README.md`):
+
+1. **P3.2 (INT0) — EMERGENCY-OFF.** Enabled (`IE=0x17`), **level-triggered**
+   (`TCON.IT0=0`), active-LOW. The handler at `0x0040` cuts both motor ports and
+   spins at `0x0054: JNB P3.2, 0x0052` until P3.2 is HIGH. Undriven → reads LOW
+   → permanent emergency-off. (`emergency_off`, annotated in
+   `main.annotated.asm`.)
+2. **P3.4 (T0) — poll enable.** `0x07AB: JB P3.4, 0x07C4` — the scanner is
+   called only when P3.4 is HIGH.
+3. **Keypad debounce** — see the release-then-hold protocol below.
+
+**The `loopback` `cl_hw` module** (`simulator/ucsim-modules/loopback/`) models
+the "RS-232 shorting connector present" pin state: it holds **P3.2 and P3.4
+HIGH** so the ROM leaves emergency-off and reaches `tb_poll` from a plain
+`reset; run`. Build/register it exactly like the teachbox/adc modules (append
+`loopback.o`; `#include "loopbackcl.h"`; `new cl_loopback(this)` in
+`mk_hw_elements()`). It leaves **P3.0 alone** so the harness can still force the
+fixed-baud path (`P3.0=0`). Commands: `set hardware loopback on|off`,
+`set hardware loopback <maskbyte>`.
+
+> **Why a read-only operator isn't enough (the hard-won bit).** A cell `read()`
+> override fixes the firmware's explicit `JB`/`JNB` but does **not** stop the
+> level-triggered INT0: the interrupt controller (interrupt.cc) tracks
+> `bit_INT0 = (port_pins & port_value)` from `EV_PORT_CHANGED` events, and its
+> `tick()` re-asserts IE0 whenever `bit_INT0==0`. The module must drive the pin
+> HIGH **through the port write path** (fire the change event) — so its `tick()`
+> does `cell_p3->write(v | 0x14)`, **not** `cell->set()`. It also registers the
+> `bits`-space cells `0xB2`/`0xB4` (P3.2/P3.4) so `JB`/`JNB` see them HIGH.
+
+## Keypad (row,group) → index map and the debounce accept protocol
+
+With the loopback module in place, the **real** keypad path works black-box.
+Two verified facts (`[SIM]`, swept in ucSim):
+
+- **Index map:** `index = row + 1 + (group-1)*8` (row 0..7, group 1..3). So
+  group 1 → `0x01..0x08`, group 2 → `0x09..0x10`, group 3 → `0x11..0x18`.
+  `kbd_handle` (`0x0C80`) does `DEC A`. **Axis-select** = index `0x02..0x07`
+  (group 1, rows 1..6) → axis 0..5, each setting mode `IRAM[0x29]=0x40`
+  (POSITION).
+- **Debounce accept = RELEASE-then-HOLD.** The accept path (`0x0C41`) is gated
+  by `JNB 0x20.6`, and flag `0x20.6` is set **only** by the `key_release` path
+  (scanner sees no key). So dispatch requires: release (sets `0x20.6`) → press +
+  **hold** the same index across ~3 scan passes (~24k stepped instructions) →
+  `kbd_handle` runs. Holding from reset with no prior release never dispatches.
+
+Reference harness pattern (per key): `release; step×3; press; step until PC hits
+0x0C80; step×N; release`. See `simulator/tests/test_teachbox_axis_select.py`
+(the `make sim-teachbox-axis` target), which asserts all six axis-select keys
+reach POSITION mode.
+
+> **Not yet mapped:** full `POS a . n ENT` numeric value entry + commit
+> (`pos_digit` 0x0D65 / `pos_commit` 0x0D9F). It depends on further editor state
+> (`0x29.3`, `0x2A.x`, the `0x6E:0x6D` accumulator) held across a multi-key
+> sequence; the per-key release cadence needed for debounce disrupts it. Axis
+> select is `[SIM]`-confirmed; value entry is the open follow-up.
+
+## Interactive engine harness (`simulator/harness/gui/engine.py`)
+
+Beyond the batch driver, `UCSimEngine` holds one long-lived `ucsim_51` over a
+**pty** (ucSim only prints its prompt on a TTY) and talks to it line-by-line —
+the interactive counterpart used by the Teachbox GUI/CLI. It presses keys
+(`press`/`release` → `set hardware teachbox`), pushes pots
+(`push_pots` → batched `set hardware adc`), advances with `run_cycles` (which
+uses **`step`**, per the gotcha above), and reads IRAM/XRAM state. Use it when
+you need to *press → advance → read → decide → repeat* in one session (the batch
+harness can't make mid-run decisions). Text front-ends: `cli.py` (and
+`gui.py`); a `--console-port N` opens a second `nc`-attachable console, but note
+the two consoles contend for the one sim — prefer the built-in `:ucsim <cmd>`
+passthrough for inspection.
+
 ## Reading failures (ROB3 quick triage)
 
 - **Banner only / core dump** → the `@` filename bug. Use the `rob3.hex` copy.
@@ -276,6 +382,12 @@ with no firmware change. Full rationale + the layered plan:
   `dc`) or the path is gated on un-injected hardware; add stimulus.
 - **Phantom keypress / instant "hit"** → undriven port reading `0xFF`; the pin
   model must drive idle-LOW columns.
+- **Keys pressed but nothing happens / trapped at 0x0047..0x0054** → the P3.2
+  EMERGENCY-OFF gate (and P3.4 poll gate); build/enable the `loopback` module.
+- **Scanner runs but no key dispatches (0x0C80 never hit)** → debounce needs the
+  RELEASE-then-HOLD cadence (flag `0x20.6`).
+- **A per-key `run 8000` blocks ~20 s** → use `step`, not `run` (bounded advance
+  gotcha); and never pipeline a command after a run/step in one write.
 - **Golden test FAIL after edits** → you changed bytes; `make gen` and
   re-annotate the `.asm`, don't hand-edit the generated `.a51`.
 
@@ -283,6 +395,9 @@ with no firmware change. Full rationale + the layered plan:
 
 - Running `make verify` / `make sim-*` / `make gen`, or adding sim tests.
 - Driving `s51` on the ROB3 ROM (batch harness or interactive) with the correct
-  gates/stimulus and the `@`-free hex copy.
-- Building or calibrating the teachbox `cl_hw` module.
+  gates/stimulus and the `@`-free hex copy; remember `step N` (not `run N`) for
+  bounded advance.
+- Building or calibrating the teachbox / adc / loopback `cl_hw` modules.
+- Getting the firmware to actually poll the keypad (P3.2/P3.4 gates + loopback)
+  or dispatch a key (debounce release-then-hold; the (row,group)→index map).
 - Any task that touches the ROB3 firmware build/verify/simulate pipeline.

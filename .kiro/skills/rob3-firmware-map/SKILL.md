@@ -51,7 +51,7 @@ by default.)
 | Vector | Addr    | Target   | Role |
 | :----- | :------ | :------- | :--- |
 | Reset  | `0x0000`| `0x0600` | `LJMP 0x0600` init (`02 06 00`) |
-| INT0   | `0x0003`| `0x0040` | DC-motor pulse output ISR (bank 1) |
+| INT0   | `0x0003`| `0x0040` | **EMERGENCY-OFF** handler (P3.2, active-LOW, level-trig; bank 1) |
 | Timer0 | `0x000B`| `0x0080` | ~5.5 ms system tick (reload TL0=0x11/TH0=0xE8) |
 | INT1   | `0x0013`| `0x00C0` | **Axis servo** state machine (ADC EOC → pin 13; bank 1) |
 | Timer1 | `0x001B`| — (gap)  | ET1 never enabled; Timer1 is baud-gen only |
@@ -118,9 +118,18 @@ ADC0808/0809**, EOC → INT1 — *not* a quadrature encoder. [HW]
    download; responses framed with `0x03` (ETX). Command decode is partly
    [INFER].
 3. **Teach-pendant editor** (scanner `0x0C00`, handler `0x0C80`) — scans the 5×5
-   matrix (strobe via 8255, read columns on **P1/0x90**), debounces (3-sample),
-   returns a key index; the handler does axis jog, program edit, run/stop,
-   position teach, and display update via `0x47`. [BYTE]/[SIM]
+   matrix (strobe via 8255, read columns on **P1/0x90**), debounces, returns a
+   key index; the handler does axis jog, program edit, run/stop, position teach,
+   and display update via `0x47`. [BYTE]/[SIM] Verified specifics:
+   key **index = row+1 + (group−1)×8**; **axis-select = index 0x02..0x07**
+   (group 1, rows 1..6) → axis 0..5, each setting mode `0x29=0x40` (POSITION).
+   Debounce **accept = release-then-hold**: the accept path (`0x0C41`) is gated
+   by `JNB 0x20.6`, and `0x20.6` is set only by the release path — so a key
+   dispatches only after a prior release then a held press. In ucSim the ROM
+   only reaches the poll (`tb_poll` `0x07C4`) with the P3.2/P3.4 gates satisfied
+   (loopback module) — see `rob3-firmware-sim`. POS-digit value entry
+   (`pos_digit` 0x0D65 / `pos_commit` 0x0D9F) is `[BYTE]` but not yet mapped as a
+   black-box key sequence.
 4. **Program interpreter** (`0x0941`) — executes stored motion programs from
    external SRAM: 8-byte instructions (opcode, 6 axis targets, speed/flags),
    PC in `0x66:0x67`, end marker `0x83`. Instruction set only partly decoded
@@ -140,7 +149,7 @@ All positions 8-bit (0–255); firmware is zero-based, robot docs are one-based.
 
 ## Named entry points (proposed labels) [BYTE addresses]
 
-`0x0600` sys_init · `0x0040` isr_ext0 (motor pulse) · `0x0080` isr_timer0 (tick)
+`0x0600` sys_init · `0x0040` emergency_off (INT0, P3.2) · `0x0080` isr_timer0 (tick)
 · `0x00C0` isr_ext1 (axis servo) · `0x0300` isr_serial · `0x0541` serial_tx ·
 `0x074D` main_loop · `0x07D0` write_digital_out · `0x0802` program_load ·
 `0x08FF` motion_execute · `0x0941` program_step · `0x0C00` keyboard_scan ·
@@ -154,7 +163,6 @@ All positions 8-bit (0–255); firmware is zero-based, robot docs are one-based.
   phase-table description in `axis_state_machine.md` is a tentative hypothesis
   pending decode.
 - Exact servo gains / accel-decel table contents (`~0x0145`, `~0x01B9`).
-- P3.4 (main-loop input) and P3.2 (INT0 debounce input) physical roles.
 - `DPH=0x48` latch's exact function (region known, role open).
 
 ## When to use this skill
