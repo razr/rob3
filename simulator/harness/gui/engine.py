@@ -162,7 +162,14 @@ class UCSimEngine:
             self.cmd("set mem sfr 0xb0 0x00")   # P3.0=0 -> fixed-baud path
 
     def run_cycles(self, n: int) -> None:
-        self.cmd("run %d" % n, timeout=20.0)
+        # NOTE: in this ucSim build `run N` does NOT stop after N cycles — it
+        # free-runs until interrupted, so it would block for the full timeout.
+        # `step N` reliably advances a bounded number of instructions and
+        # returns immediately (even while the servo ISR is active). Must be sent
+        # as its own command: a command pipelined after a run/step in the same
+        # write is consumed as a resUSER interrupt and discarded (ucSim
+        # newcmd.cc proc_input / sim.cc), so never batch anything after this.
+        self.cmd("step %d" % n, timeout=20.0)
 
     def run_to(self, addr: int, cycles: int = 3_000_000) -> bool:
         self.cmd("break 0x%04x" % addr)
@@ -183,6 +190,34 @@ class UCSimEngine:
     def push_pot(self, ch: int, value: int) -> None:
         if self.has_modules:
             self.cmd(f"set hardware adc {ch} 0x%02x" % (value & 0xFF))
+
+    def push_pots(self, values) -> None:
+        """Push several ADC channels in ONE pty write (fewer round-trips).
+
+        SAFE to batch: these are plain `set hardware adc` commands with NO
+        run/step between them, so ucSim executes them back-to-back and none can
+        be swallowed by the resUSER pipelining trap (see run_cycles note).
+        """
+        if not self.has_modules:
+            return
+        lines = ["set hardware adc %d 0x%02x" % (ch, v & 0xFF)
+                 for ch, v in enumerate(values)]
+        payload = ("\n".join(lines) + "\n").encode("latin-1")
+        os.write(self.fd, payload)
+        # each command emits one prompt; wait until all len(lines) have arrived
+        buf = ""
+        deadline = time.time() + 10.0
+        while time.time() < deadline and buf.count(PROMPT) < len(lines):
+            r, _, _ = select.select([self.fd], [], [], 0.02)
+            if not r:
+                continue
+            try:
+                data = os.read(self.fd, 4096)
+            except OSError:
+                break
+            if not data:
+                break
+            buf += data.decode("latin-1", "replace")
 
     # -- state readback -------------------------------------------------------
     def _dump_byte(self, space: str, addr: int) -> int:

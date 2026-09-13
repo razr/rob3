@@ -180,8 +180,7 @@ class TeachboxCLI:
             if not moving:
                 break
         if self.engine and self.engine.has_modules:
-            for a in range(N_AXES):
-                self.engine.push_pot(a, self.plant.pot[a])
+            self.engine.push_pots(self.plant.pot)   # one batched pty write
 
     def show(self) -> None:
         print()

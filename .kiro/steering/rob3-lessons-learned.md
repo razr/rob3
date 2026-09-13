@@ -36,6 +36,33 @@ takes the "hit" path immediately, so the scan never advances.
   key's bit — rather than OR-ing onto the raw `0xFF` cell value.
   See `simulator/ucsim-modules/teachbox/`.
 
+### `run N` does NOT stop after N cycles — use `step N` for bounded advance
+In this ucSim build (`s51` / `ucsim_51`), `run <N>` **free-runs until
+interrupted** and ignores the count — it does not stop after N cycles. A harness
+that issues `run 8000` per key therefore blocks for the whole read timeout
+(~20 s/key). `step <N>` is the primitive that reliably advances a bounded number
+of instructions and returns immediately (reason `(109) resSTEP`,
+"stepped … ticks"), even while the ADC/INT1 servo ISR is running (~4.5 ms for
+8000). Symptom of the bug: the first key after reset is fast (CPU idle at the
+main loop), but every key after a jog/target-set stalls for ~20 s.
+- **Fix:** use `step N`, not `run N`, for a bounded burst. See
+  `UCSimEngine.run_cycles` in `simulator/harness/gui/engine.py`.
+
+### Never pipeline a command after a `run`/`step` in one console write
+ucSim **freezes** the console while a `run`/`step` executes. If the next command
+is already sitting in the console input buffer (e.g. you wrote
+`"step 8000\nset hardware …\n"` in a single `os.write`), the arriving line is
+treated as a **user interrupt**: `cl_console_base::proc_input` (newcmd.cc) sees
+input-available on the frozen console, calls `sim->stop(resUSER)`, and the
+pipelined line is consumed by `read_line()` **without being executed** (see also
+the `resUSER` input-drain at sim.cc ~L258). Net effect: the following command is
+silently swallowed, so a batch/sentinel read waits forever and hits the timeout.
+- **Fix:** send anything involving a run/step as **one command per write** —
+  write `set hardware teachbox …`, then `step N` **alone**, then the release,
+  as three separate `os.write`s. Batching a single write is only safe when
+  there is **no** run/step in it (e.g. the six `set hardware adc` pot pushes in
+  `UCSimEngine.push_pots`, which are all immediate and cannot be interrupted).
+
 ## 8051 disassembly / annotation
 
 ### Byte-vs-bit operands (recurring)
