@@ -63,6 +63,24 @@ silently swallowed, so a batch/sentinel read waits forever and hits the timeout.
   there is **no** run/step in it (e.g. the six `set hardware adc` pot pushes in
   `UCSimEngine.push_pots`, which are all immediate and cannot be interrupted).
 
+### P3.2 idles LOW in ucSim → firmware sits in the EMERGENCY-OFF handler forever
+INT0 (8031 pin 12 = P3.2) is wired to the active-LOW EMERGENCY-OFF line, is
+**enabled** (init sets `IE=0x17`) and **level-triggered** (`TCON.IT0=0`). Its
+handler (0x0003 → `LJMP 0x0040`) cuts both motor 8255 ports and then **spins at
+`0x0054: JNB P3.2, 0x0052`** until P3.2 goes HIGH. In ucSim an undriven pin
+reads LOW, so the firmware sees a permanent emergency-off: INT0 re-fires, the
+handler never falls through, and execution **never reaches the main-loop
+teachbox poll (`tb_poll`, 0x07C4)** — so no keypress is ever scanned/handled.
+Symptom: press keys via `set hardware teachbox …`, hold them as long as you
+like, and no IRAM slot (0x50+axis) ever changes; a PC trace from 0x074D goes
+straight into 0x0003 → 0x0040 and loops in 0x0047..0x0054.
+- **Fix:** drive the **P3.2 pin HIGH** (emergency-off de-asserted) before
+  expecting the firmware to run normally. Note `set mem sfr 0xb0 …` writes the
+  P3 *latch*, not necessarily the input pin in this build — verify with a PC
+  trace that execution actually leaves 0x0040 and reaches 0x07C4. The
+  emergency-off handler is annotated at `emergency_off` (0x0040) in
+  `firmware/src/annotated/main.annotated.asm`.
+
 ## 8051 disassembly / annotation
 
 ### Byte-vs-bit operands (recurring)
