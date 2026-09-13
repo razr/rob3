@@ -10,6 +10,7 @@ Each module lives in its own subfolder with its own README:
 | :----- | :---- | :----- | :----------- |
 | Teachbox | `cl_teachbox` | [`teachbox/`](teachbox/) | Models the 5x5 key matrix (input on P1 + the 8255 Port B row strobe) so `kbd_scan` reads pressed keys. |
 | ADC | `cl_adc` | [`adc/`](adc/) | Models the ADC0808/0809; serves per-channel feedback and **asserts EOC → INT1**, letting the ROM **free-run past the init gate** from a plain `reset; run`. |
+| Loopback | `cl_loopback` | [`loopback/`](loopback/) | Models the **RS-232 shorting connector** / MM74C04N #1 conditioning: holds P3.2 (INT0/EMERGENCY-OFF) and P3.4 (T0/poll-gate) HIGH so the ROM leaves the emergency-off handler and reaches the teachbox poll. |
 
 Build instructions (shared) are below; module-specific behaviour, commands, and
 verification are in each subfolder's README.
@@ -23,19 +24,22 @@ ucSim **0.9.9**, e.g. a checkout at `~/github/danieldrotos/ucsim`).
    ```bash
    cp teachbox/teachbox.cc teachbox/teachboxcl.h  <ucsim>/src/sims/s51.src/
    cp adc/adc.cc           adc/adccl.h            <ucsim>/src/sims/s51.src/
+   cp loopback/loopback.cc loopback/loopbackcl.h  <ucsim>/src/sims/s51.src/
    ```
 2. Add the objects to the build — in `src/sims/s51.src/objs.mk`, append
-   `teachbox.o adc.o` to the `OBJECTS` list.
+   `teachbox.o adc.o loopback.o` to the `OBJECTS` list.
 3. Register the hw — in `src/sims/s51.src/uc51.cc`:
    - add the includes near the other hw includes:
      ```cpp
      #include "teachboxcl.h"
      #include "adccl.h"
+     #include "loopbackcl.h"
      ```
    - at the end of `cl_51core::mk_hw_elements()` (after the interrupt hw):
      ```cpp
      { class cl_hw *tb  = new cl_teachbox(this); add_hw(tb);  tb->init();  }
      { class cl_hw *adc = new cl_adc(this);      add_hw(adc); adc->init(); }
+     { class cl_hw *lb  = new cl_loopback(this); add_hw(lb);  lb->init();  }
      ```
    (Add only the module(s) you want; each is independent.)
 4. Configure and build:

@@ -80,6 +80,19 @@ straight into 0x0003 → 0x0040 and loops in 0x0047..0x0054.
   trace that execution actually leaves 0x0040 and reaches 0x07C4. The
   emergency-off handler is annotated at `emergency_off` (0x0040) in
   `firmware/src/annotated/main.annotated.asm`.
+- **Root cause (HW):** P3.2 (and P3.4/poll-gate, P3.0/baud) are conditioned by
+  **MM74C04N #1**; the board needs the **RS-232 shorting connector** installed
+  for these to sit HIGH (hardware/teachbox/README.md, board/MM74C04N.md). The
+  `loopback` cl_hw module (`simulator/ucsim-modules/loopback/`) reproduces that
+  "connector present" pin state and lets the ROM reach the teachbox poll from a
+  plain `reset; run`.
+- **ucSim gotcha (interrupt sampling):** a read-only cell operator that returns
+  P3.2 HIGH is **not** enough to stop the level-triggered INT0 — the interrupt
+  controller (interrupt.cc) tracks `bit_INT0 = (port_pins & port_value)` from
+  `EV_PORT_CHANGED` events, and its `tick()` re-asserts IE0 whenever
+  `bit_INT0==0`. The pin must be driven HIGH **through the port write path**
+  (fire the change event), which is why the loopback module writes the P3 latch
+  via `cell->write()` on each `tick()`, not `cell->set()`.
 
 ## 8051 disassembly / annotation
 

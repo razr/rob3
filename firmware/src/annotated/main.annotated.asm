@@ -443,10 +443,72 @@ init_finish:
         movx    @DPTR,A             ; select axis 0 feedback (ADD-A low)
         setb    0xA8.7              ; EA = 1, global interrupts ON
 ; 074D:                 (falls through into main loop)
-        ; ---> MAIN LOOP entry at 0x074D (annotated in a later pass)
+        ; ---> MAIN LOOP entry at 0x074D
+
 ;==============================================================================
-; END OF ANNOTATED INITIALIZATION SEQUENCE
-;   Remaining code (main loop, ISRs, protocol, interpreter, teach pendant)
-;   to be annotated in subsequent passes. 0xFF EPROM padding is intentionally
-;   NOT annotated.
+; MAIN LOOP  (0x074D -> 0x07C7)                          [BYTE][SIM][HW]
+;------------------------------------------------------------------------------
+; The idle super-loop. It services motion/axis flags, then — gated by three
+; Port-3 input lines — polls the teach-pendant keypad. All three P3 gate lines
+; are conditioned by MM74C04N #1 (hardware/board/MM74C04N.md), which is why the
+; board needs BOTH the Teachbox AND the RS-232 shorting connector installed to
+; run (hardware/teachbox/README.md "Hardware requirements").
+;
+; THREE GATES that must be satisfied for the keypad ever to be scanned — each
+; verified by tracing the PC in ucSim and forcing the pin state:            [SIM]
+;
+;   GATE 1  EMERGENCY-OFF (P3.2 / INT0).  If P3.2 is LOW the level-triggered
+;           INT0 keeps vectoring to the emergency_off handler (0x0040), which
+;           never returns to the loop. P3.2 must be HIGH.           [BYTE][SIM]
+;
+;   GATE 3  TEACHBOX-POLL ENABLE (P3.4 / T0).  At 0x07AB:
+;               20 B4 16   JB  P3.4, tb_poll (0x07C4)
+;           the keypad scanner is CALLED only when P3.4 (8031 pin 14, T0,
+;           bit addr 0xB4) reads HIGH; otherwise the loop skips the poll. So
+;           P3.4 must be HIGH.                                       [BYTE][SIM]
+;           (GATE 2 — the INT1/ADC servo ISR appearing to hog the CPU — is not
+;            a real gate: once GATE 3 passes, the loop reaches tb_poll on the
+;            first pass even with INT1 active. It only *looked* like a block
+;            while the CPU was trapped by GATE 1.)                      [SIM]
+;
+;   GATE 4  KEYPAD DEBOUNCE (in kbd_scan, 0x0C00).  Even with the scanner
+;           called, a key is only ACCEPTED (→ kbd_handle) after it survives the
+;           two-stage debounce: first pass latches the index into 0x56 and arms
+;           the repeat timer 0x57 (=0x23) via key_changed, and only a later
+;           pass with the same held key returns a nonzero index. A single short
+;           press/step burst therefore latches 0x56 but never dispatches; the
+;           key must be HELD across enough scan passes.               [SIM]
+;
+; SIM IMPLICATION: to exercise the real keypad path in ucSim you must present
+; P3.2=1 and P3.4=1 (the "RS-232 shorting connector present" pin state) and
+; HOLD the key across several scan passes. The `loopback` cl_hw module
+; (simulator/ucsim-modules/loopback/) drives P3.2/P3.4 for exactly this reason.
+;------------------------------------------------------------------------------
+        org     0x074D
+main_loop:
+        clr     0xAF                ; C2 AF     EA = 0 (guard the flag section)
+        setb    0xD4                ; D2 D4     PSW.4 = 1 (register bank 2)
+        jnb     0x2F,ml_0782        ; 30 2F 2C  bit 0x25.7 (motion active?) clear -> skip
+        ; ... (motion/axis servicing 0x0757..0x0781; annotated in a later pass)
+ml_0782:
+        ; ... (0x0782..0x07A8 clears/sets the housekeeping flags 0x20.x/0x28.x)
+        clr     0xAF                ; C2 AF     EA = 0 again before the poll gate
+        jb      0xB4,tb_poll        ; 20 B4 16  GATE 3: poll keypad only if P3.4 HIGH
+        ; --- P3.4 LOW: skip the keypad poll this pass ---
+        clr     A                   ; E4
+        mov     0x26,A              ; F5 26
+        mov     0x66,A              ; F5 66
+        mov     0x67,0x3F           ; 85 3F 67
+        lcall   0x0803              ; 12 08 03
+        ; (0x07B7.. more housekeeping, then loops back to main_loop)
+        ; falls around to the tb_poll call site below when P3.4 is HIGH:
+        org     0x07C4
+tb_poll:
+        lcall   kbd_scan            ; 12 0C 00  scan the 5x5 matrix (enters 0x0C00)
+        ; (jz/…: nonzero A -> kbd_handle at 0x0C80; see teachbox.annotated.asm)
+;==============================================================================
+; END OF ANNOTATED INITIALIZATION + MAIN-LOOP GATES
+;   Remaining code (full motion servicing, ISRs, protocol, interpreter, the
+;   teach-pendant editor) to be annotated in subsequent passes. 0xFF EPROM
+;   padding is intentionally NOT annotated.
 ;==============================================================================
