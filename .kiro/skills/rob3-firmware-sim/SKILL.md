@@ -88,7 +88,9 @@ s51 -t 51 -X 11.0592M simulator/build/rob3.hex
 ```
 
 The Makefile does this copy for you (`$(SAFEHEX) = build/rob3.hex`, relative to
-`simulator/`).
+`simulator/`). Filed upstream as ucSim issue
+[#13](https://github.com/danieldrotos/ucsim/issues/13) (submitted + closed);
+local report at `simulator/issues/002-segfault-on-at-in-filename/`.
 
 ## CRITICAL gotcha — `run N` does NOT stop after N cycles; use `step N`
 
@@ -108,6 +110,7 @@ Two related interactive-driving rules (both cost hours if missed):
   `proc_input`) and **discarded without executing**. Send press, then `step N`
   **alone**, then the release, as separate writes. Batching one write is only
   safe with **no** run/step in it (e.g. the six `set hardware adc` pot pushes).
+  Reproducible report + patch: `simulator/issues/001-pipelined-command-discarded-on-resuser/`.
 - Bit reads (`JB`/`JNB`) go through the **`bits` address space**
   (`bits->read(bitaddr)` in jmp.cc), *not* the SFR byte cell — relevant when a
   `cl_hw` module tries to override a port bit (see the loopback module).

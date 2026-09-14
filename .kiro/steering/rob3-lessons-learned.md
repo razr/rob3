@@ -23,6 +23,9 @@ pty. This was initially and wrongly blamed on curses; curses is unrelated.
 - **Fix:** always run ucSim against an `@`-free copy, e.g.
   `cp firmware/hex/M2764A@DIP28.HEX /tmp/rob3.hex` (the sim harness/tests already
   copy to `sim/build/rob3.hex` for this reason).
+- **Upstream:** filed as ucSim issue
+  [#13](https://github.com/danieldrotos/ucsim/issues/13) (submitted + closed);
+  local write-up at `simulator/issues/002-segfault-on-at-in-filename/`.
 
 ### Simulated port pins idle HIGH, but the teachbox matrix idles LOW
 ucSim's `cl_port` returns `cell->get() & port_pins`, and `port_pins` defaults to
@@ -62,6 +65,9 @@ silently swallowed, so a batch/sentinel read waits forever and hits the timeout.
   as three separate `os.write`s. Batching a single write is only safe when
   there is **no** run/step in it (e.g. the six `set hardware adc` pot pushes in
   `UCSimEngine.push_pots`, which are all immediate and cannot be interrupted).
+- **Reported:** reproducible write-up + patch at
+  `simulator/issues/001-pipelined-command-discarded-on-resuser/` (confirmed bug,
+  prepared for upstream submission).
 
 ### P3.2 idles LOW in ucSim → firmware sits in the EMERGENCY-OFF handler forever
 INT0 (8031 pin 12 = P3.2) is wired to the active-LOW EMERGENCY-OFF line, is

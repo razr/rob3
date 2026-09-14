@@ -42,8 +42,7 @@ ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 def find_sim():
     for c in (os.environ.get("UCSIM_51"), shutil.which("ucsim_51"),
-              shutil.which("s51"),
-              os.path.expanduser("~/github/danieldrotos/ucsim/src/sims/s51.src/ucsim_51")):
+              shutil.which("s51")):
         if c and os.path.exists(c) and os.access(c, os.X_OK):
             return c
     return None
