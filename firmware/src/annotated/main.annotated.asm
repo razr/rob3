@@ -220,6 +220,307 @@ eo_setrow:
 
 
 ;==============================================================================
+; EXT1 / AXIS SERVO HANDLER  isr_ext1 (0x00C0)                 [BYTE][HW][INFER]
+;------------------------------------------------------------------------------
+; External Interrupt 1 is driven by ADC0808/0809 end-of-conversion on P3.3.
+; One interrupt services the axis selected by the rotating mask at 0x22, then
+; advances the ADC channel and workspace pointer for the next conversion.
+; The ADC feedback path and INT1 wiring are [HW]; the control-flow and RAM
+; accesses below are [BYTE]. Exact motor polarity and L293 semantics remain
+; [INFER] where the ROM only exposes encoded output-table values.
+;
+; Per-axis layout (N = 0..5):
+;   0x40+N target, 0x48+N speed/state input, 0x50+N current position,
+;   0x58+N ADC feedback, 0x70+N deceleration/state workspace, 0x78+N ISR state.
+;   0x22 rotating axis mask; 0x21 active axes; 0x2B need-move;
+;   0x2C moving; 0x2D direction; 0x4E/0x4F Port A/C output shadows.
+;------------------------------------------------------------------------------
+        org     0x00C0
+isr_ext1:
+        push    0xD0                ; save PSW                                      [BYTE]
+        setb    0xD3                ; select register bank 1 (axis ISR bank)        [BYTE]
+        mov     R2,A                ; preserve accumulator across the ISR           [BYTE]
+        mov     A,R0                ; load current axis base pointer             [BYTE]
+        add     A,#0x10             ; derive feedback/workspace address          [BYTE]
+        mov     R1,A                ; R1 = 0x58+axis: feedback/workspace slot   [BYTE]
+
+        jb      0x22.7,ext1_feedback ; active-axis path: sample ADC feedback [BYTE]
+        jnb     0x22.6,ext1_control  ; otherwise use the output/control path [BYTE]
+        mov     C,0x23.4             ; transfer timer phase from Timer 0 ISR [BYTE]
+        mov     0x23.3,C             ; publish phase to the axis state machine [BYTE]
+        clr     0x23.4              ; consume the timer phase hand-off           [BYTE]
+
+; Feedback branch: read the completed ADC conversion for the selected axis and
+; store it in that axis's feedback slot before advancing the round-robin state.
+ext1_feedback:
+        mov     0x83,#0x59           ; select ADC feedback device                  [BYTE]
+        movx    A,@DPTR              ; read completed conversion                  [BYTE]
+        mov     @R1,A                ; store feedback for this axis                [BYTE]
+        ajmp    ext1_advance         ; finish this pass and select next axis      [BYTE]
+
+; Control branch: derive the axis error/profile values and calculate a bounded
+; motor command from the selected axis's feedback and target data.
+ext1_control:
+        mov     0x83,#0x58           ; select ADC channel/control device          [BYTE]
+        rl      A                    ; derive table index from axis state        [BYTE]
+        add     A,R1                 ; add axis workspace offset                 [BYTE]
+        add     A,#0xDE              ; point into inline profile table            [BYTE]
+        mov     R4,A                ; preserve first table index                 [BYTE]
+        movc    A,@A+PC              ; lookup output/control parameter           [BYTE]
+        xch     A,R4                ; exchange table value and second index     [BYTE]
+        movc    A,@A+PC              ; lookup complementary parameter            [BYTE]
+        mov     0xF0,A              ; save table value in B                       [BYTE]
+        movx    A,@DPTR              ; read current feedback/control value       [BYTE]
+        mov     R5,A                ; preserve first sampled value                [BYTE]
+        inc     0x83                ; select adjacent ADC/control address       [BYTE]
+        movx    A,@DPTR             ; read second sampled value                  [BYTE]
+        subb    A,R4                 ; compare feedback against target/table value [BYTE]
+        jc      ext1_error_low       ; branch to low-side error handling            [BYTE]
+        mov     @R1,A               ; store the sampled difference                [BYTE]
+        mov     A,R5                ; restore first sampled value                 [BYTE]
+        mov     R5,0xF0             ; move profile value into R5                  [BYTE]
+        mul     AB                  ; multiply sampled value by profile value    [BYTE]
+        mov     R4,0xF0             ; preserve high product byte                  [BYTE]
+        mov     A,@R1               ; reload stored difference                    [BYTE]
+        mov     0xF0,R5             ; move second factor into B                   [BYTE]
+        mul     AB                  ; multiply difference by second factor       [BYTE]
+        add     A,R4                ; combine product components                  [BYTE]
+        rl      A                   ; scale computed output                       [BYTE]
+        rl      A                   ; scale computed output again                 [BYTE]
+        anl     A,#0x03              ; clamp/quantize output magnitude              [BYTE]
+        rr      A                   ; restore scaled value alignment               [BYTE]
+        mov     R4,A                ; retain scaled magnitude                      [BYTE]
+        mov     A,0xF0              ; load high product byte                      [BYTE]
+        addc    A,#0x00             ; propagate carry into high byte               [BYTE]
+        rlc     A                   ; test for upper-range saturation              [BYTE]
+        jc      ext1_limit_high     ; clamp positive overflow                     [BYTE]
+        rlc     A                   ; continue range test                          [BYTE]
+        orl     A,R4                ; merge magnitude and direction bits            [BYTE]
+        jc      ext1_limit_high     ; clamp encoded overflow                       [BYTE]
+        mov     @R1,A               ; store calculated axis value                   [BYTE]
+        anl     0x09,#0x57          ; retain relevant axis-state bits               [BYTE]
+        subb    A,@R1               ; compare calculated and stored values          [BYTE]
+        jnz     ext1_update_state   ; update state when value changed               [BYTE]
+        mov     R4,#0x00            ; zero adjustment for equal values              [BYTE]
+        sjmp    ext1_output_state   ; continue with output encoding                 [BYTE]
+
+; Low-side clamp: the comparison underflowed, so force the working value to
+; zero and continue with the negative-direction error/profile calculation.
+ext1_error_low:
+        mov     @R1,#0x00            ; clamp low-side value                         [BYTE]
+        mov     R4,#0x08             ; record negative-direction code               [BYTE]
+        subb    A,#0xF9              ; calculate low-side error magnitude            [BYTE]
+        mov     R6,A                 ; save error magnitude                         [BYTE]
+        jz      ext1_small_error     ; zero/small error uses minimum profile         [BYTE]
+        jc      ext1_small_error     ; underflow uses minimum profile                [BYTE]
+        sjmp    ext1_profile         ; continue with profile lookup                 [BYTE]
+
+; High-side clamp: the calculated value overflowed the supported range, so
+; saturate the working value at 0xFF and select the positive-direction code.
+ext1_limit_high:
+        mov     @R1,#0xFF            ; clamp high-side value                        [BYTE]
+        mov     R4,#0x04             ; record positive-direction code               [BYTE]
+; Small-error path: use the minimum nonzero profile entry and its marker before
+; entering the common profile selection logic.
+ext1_small_error:
+        mov     A,#0x01              ; minimum nonzero profile index                [BYTE]
+        mov     R6,#0x0A             ; retain small-error marker                    [BYTE]
+        sjmp    ext1_profile        ; continue with profile lookup                 [BYTE]
+
+; Changed-error path: derive the direction code from the subtraction carry and
+; normalize negative values to a magnitude before selecting the profile.
+ext1_update_state:
+        jc      ext1_negative_error  ; branch for negative error                    [BYTE]
+        mov     R4,#0x04             ; positive-direction code                      [BYTE]
+        sjmp    ext1_profile_sign    ; normalize profile sign                      [BYTE]
+; Negative-error normalization: convert the error magnitude to two's complement
+; and record the negative motor-direction code.
+ext1_negative_error:
+        cpl     A                    ; two's-complement error magnitude            [BYTE]
+        inc     A                    ; complete two's complement                   [BYTE]
+        mov     R4,#0x08             ; negative-direction code                      [BYTE]
+; Profile-sign join: compare the normalized error with the small-error threshold
+; and route large values through the common profile path.
+ext1_profile_sign:
+        cjne    A,#0x0A,ext1_profile ; compare against small-error threshold         [BYTE]
+; Profile threshold path: select the minimum profile when the comparison carry
+; indicates that the error is outside the directly indexed profile range.
+ext1_profile:
+        jnc     ext1_small_error     ; saturate profile when threshold is exceeded   [BYTE]
+; Profile lookup: fetch the speed/direction entry and use its marker bit to
+; update the active-axis mask before preparing the motor state.
+ext1_output_state:
+        mov     R6,A                 ; save profile index                           [BYTE]
+        add     A,#0x94              ; index inline speed/direction table           [BYTE]
+        movc    A,@A+PC              ; read speed/direction profile entry           [BYTE]
+        jbc     0xE0.7,ext1_set_axis ; consume table direction/active marker         [BYTE]
+        sjmp    ext1_output          ; proceed without changing active mask         [BYTE]
+; Active-axis update: merge the profile's axis mask into the active-axis flags
+; while preserving the rotating current-axis mask.
+ext1_set_axis:
+        xch     A,0x22               ; exchange profile mask with current axis mask  [BYTE]
+        orl     0x21,A               ; mark selected axis active                     [BYTE]
+        xch     A,0x22               ; restore current axis mask                    [BYTE]
+
+; Output gate: skip motor-state work unless the axis subsystem is enabled.
+ext1_output:
+        jb      0x20.0,ext1_motion   ; axis subsystem enabled?                      [BYTE]
+        ajmp    ext1_advance         ; skip control when motion is disabled          [BYTE]
+
+; Motion-state update: combine the profile command with the selected axis's
+; existing state and choose the speed/direction encoding branch.
+ext1_motion:
+        mov     R5,A                 ; preserve encoded profile value               [BYTE]
+        dec     @R0                  ; update per-axis motion counter               [BYTE]
+        mov     A,@R0                ; load per-axis state                         [BYTE]
+        anl     A,#0x0F              ; isolate low state nibble                    [BYTE]
+        jnz     ext1_write_output    ; nonzero state goes directly to output        [BYTE]
+        mov     A,R5                 ; restore encoded profile value               [BYTE]
+        orl     A,@R0                ; merge it with existing state               [BYTE]
+        cjne    R6,#0x00,ext1_speed_case ; branch for nonzero profile               [BYTE]
+        sjmp    ext1_write_state     ; zero profile uses the current state          [BYTE]
+; Speed-case dispatch: distinguish the special low-speed profile from the normal
+; direction encoding path.
+ext1_speed_case:
+        cjne    R6,#0x01,ext1_direction_case ; select special profile case           [BYTE]
+        jnb     0xE0.5,ext1_speed_case_2    ; test encoded profile bit               [BYTE]
+        add     A,#0x03              ; apply special speed increment                 [BYTE]
+        sjmp    ext1_write_state     ; store resulting state                         [BYTE]
+; Direction encoding: place the direction code in the high nibble and combine
+; it with the calculated speed/profile value.
+ext1_direction_case:
+        mov     A,R4                 ; load direction code                          [BYTE]
+        swap    A                    ; move direction into output nibble             [BYTE]
+        orl     A,R5                 ; combine direction and speed                  [BYTE]
+        sjmp    ext1_write_state     ; store resulting state                         [BYTE]
+; Alternate speed case: apply the secondary speed increment when its profile bit
+; is set, then continue to direction handling.
+ext1_speed_case_2:
+        jnb     0xE0.4,ext1_speed_case_3 ; test alternate speed bit                 [BYTE]
+        add     A,#0x02              ; apply alternate speed increment                [BYTE]
+; Direction test: select the special direction update or retain the existing
+; state when the profile does not request a direction change.
+ext1_speed_case_3:
+        cjne    R4,#0x04,ext1_direction_check ; test direction encoding               [BYTE]
+        jb      0xE0.6,ext1_direction_set   ; select direction update                 [BYTE]
+        sjmp    ext1_state_done      ; retain state when direction is inactive        [BYTE]
+; Profile-marker check: only enter the direction update when the profile marker
+; bit is set.
+ext1_direction_check:
+        jnb     0xE0.7,ext1_state_done ; retain state when profile marker is clear      [BYTE]
+; Direction update: address the per-axis workspace and apply the special output
+; encoding used for the 0x0F state.
+ext1_direction_set:
+        mov     0x09,R0              ; form axis-state comparison address             [BYTE]
+        xrl     0x09,#0x70           ; map axis base to 0x78+axis workspace            [BYTE]
+        cjne    @R1,#0x0F,ext1_write_state ; skip special encoding unless state is 0x0F [BYTE]
+        anl     A,#0xC0              ; preserve direction bits                       [BYTE]
+        orl     A,#0x03              ; add minimum drive code                        [BYTE]
+        sjmp    ext1_write_state     ; store resulting state                         [BYTE]
+; State-completion path: transform the retained state into the stop/hold output
+; form before writing it back to the axis workspace.
+ext1_state_done:
+        xrl     A,#0xC0              ; invert direction-related output bits           [BYTE]
+        add     A,#0x0E              ; apply stop/hold output offset                  [BYTE]
+; State write setup: select the per-axis workspace and initialize the output
+; sentinel used by the following increment.
+ext1_write_state:
+        mov     0x09,R0              ; select axis state workspace                   [BYTE]
+        xrl     0x09,#0x70           ; map R0 to 0x78+axis                           [BYTE]
+        mov     @R1,#0xFF            ; initialize output-state sentinel              [BYTE]
+; Output increment: advance the encoded per-axis output value for table lookup.
+ext1_write_output:
+        inc     @R1                  ; advance output-state value                   [BYTE]
+; State commit and port selection: store the axis state, then choose Port A or
+; Port C and its shadow register for the motor output update.
+ext1_write_state_value:
+        mov     @R0,A                ; update per-axis state/current value
+        mov     A,R0                 ; reload axis workspace base                    [BYTE]
+        jbc     0xE0.2,ext1_port_c  ; select Port C path for upper axes              [BYTE]
+        mov     0x83,#0x50           ; axes 0..3 use 8255 Port A                    [BYTE]
+        mov     R1,#0x4E             ; select Port A shadow                         [BYTE]
+        sjmp    ext1_apply_output    ; apply encoded output                         [BYTE]
+; Upper-axis port path: prepare the Port C output selection and offset.
+ext1_port_c:
+        mov     R4,#0x00             ; clear alternate output offset                 [BYTE]
+        mov     A,R0                 ; reload axis workspace base                    [BYTE]
+        jnb     0xE0.2,ext1_port_a  ; retain Port A path if selector is clear         [BYTE]
+        clr     0xE0.2               ; clear selector before Port C output             [BYTE]
+; Port C selection join: select the Port C device and its output shadow.
+ext1_port_a:
+        mov     0x83,#0x52           ; axes 4..5 use 8255 Port C                    [BYTE]
+        mov     R1,#0x4F             ; select Port C shadow                         [BYTE]
+; Motor output commit: combine the table encodings with the selected Port A/C
+; shadow, write the result to the 8255, and test the remaining move mask.
+ext1_apply_output:
+        mov     R5,A                 ; preserve axis/output table index               [BYTE]
+        movc    A,@A+PC              ; read first motor output encoding [INFER]       [BYTE]
+        anl     A,@R1                ; mask existing Port A/C shadow                  [BYTE]
+        mov     @R1,A                ; store masked motor shadow                      [BYTE]
+        mov     A,R4                 ; load direction/output offset                  [BYTE]
+        add     A,R5                 ; form second output table index                [BYTE]
+        movc    A,@A+PC              ; read second motor output encoding [INFER]      [BYTE]
+        orl     A,@R1                ; merge encoded output with shadow               [BYTE]
+        mov     @R1,A                ; update Port A/C output shadow                 [BYTE]
+        movx    @DPTR,A              ; write motor command to 8255 [HW][BYTE]
+        mov     A,0x22               ; load current axis mask                      [BYTE]
+        anl     A,0x2B               ; clear completed axes from need-move mask      [BYTE]
+        jnz     ext1_advance         ; advance when another axis remains active      [BYTE]
+
+; Round-robin exit: rotate the axis mask, select the next ADC channel, restore
+; the interrupted CPU context, and return from EXT1.
+ext1_advance:
+        mov     A,0x22               ; load current rotating axis mask              [BYTE]
+        rl      A                    ; rotate mask to next axis                     [BYTE]
+        mov     0x22,A               ; save next-axis mask                          [BYTE]
+        mov     A,R0                 ; load current axis workspace base             [BYTE]
+        inc     A                    ; advance to next axis                         [BYTE]
+        anl     A,#0x07              ; wrap axis selector                           [BYTE]
+        mov     0x83,#0x58           ; select ADC channel device                    [BYTE]
+        movx    @DPTR,A              ; select next ADC channel [HW][BYTE]
+        orl     A,#0x48              ; convert selector to 0x48+axis base           [BYTE]
+        mov     R0,A                 ; save next axis speed/state base              [BYTE]
+        mov     A,R2                 ; restore interrupted accumulator              [BYTE]
+        pop     0xD0                  ; restore interrupted PSW                     [BYTE]
+        reti                          ; return from External Interrupt 1            [BYTE]
+
+
+;==============================================================================
+; TIMER 0 TICK HANDLER  timer0_isr (0x0080)                       [BYTE][SIM]
+;------------------------------------------------------------------------------
+; Reached from the Timer 0 vector at 0x000B. Timer 0 is configured in mode 1
+; during initialization, with TH0=0xE8 as the reload value; this handler also
+; refreshes TL0=0x11 on every overflow. The resulting interrupt cadence depends
+; on the 8031 timer-clock divider; the software prescaler below is byte-exact.
+;
+; The handler publishes timing events through bit-addressable RAM. The names
+; below describe observed consumers, not undocumented hardware registers:
+;   0x20.3  phase/timing toggle, also copied by the axis ISR [BYTE][SIM]
+;   0x20.4  periodic axis/main-loop update request              [BYTE][SIM]
+;   0x23.5  periodic timer event                                [BYTE][INFER]
+;   0x23.6  slower motion/watchdog event                        [BYTE][SIM]
+;   0x23.7  serial-timeout tick                                 [BYTE][SIM]
+;------------------------------------------------------------------------------
+        org     0x0080
+timer0_isr:                         ; ISR1: Timer 0 overflow / system tick
+        mov     0x8A,#0x11          ; TL0 = 0x11: reload low byte             [BYTE]
+        mov     0x8C,#0xE8          ; TH0 = 0xE8: reload high byte            [BYTE]
+        setb    0x88.4              ; TR0 = 1: keep Timer 0 running          [BYTE]
+        setb    0x23.7              ; publish timer tick / serial timeout    [BYTE]
+        setb    0x23.4              ; mark timer phase state                 [BYTE]
+        cpl     0x20.3              ; toggle timing phase                    [BYTE]
+        jnb     0x20.3,timer0_slow  ; only set 0x20.4 on one phase           [BYTE]
+        setb    0x20.4              ; request periodic main-loop update      [BYTE]
+timer0_slow:
+        djnz    0x1D,timer0_return  ; divide tick rate by 10                  [BYTE]
+        mov     0x1D,#0x0A          ; restart the slow-event prescaler       [BYTE]
+        setb    0x23.6              ; publish the slower motion event        [BYTE]
+        setb    0x23.5              ; publish the slower timer event          [BYTE]
+timer0_return:
+        reti                         ; return from Timer 0 interrupt          [BYTE]
+
+
+;==============================================================================
 ; INITIALIZATION SEQUENCE   (0x0600 -> main loop)
 ;------------------------------------------------------------------------------
 ; Reached from the reset vector. Brings up: warm-up delay, 8255 PPI, axis
