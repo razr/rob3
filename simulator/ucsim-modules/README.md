@@ -1,8 +1,13 @@
-# ROB3 — ucSim hardware modules
+# ROB3 — ucSim hardware modules (loadable plugins)
 
-**Compile-time ucSim peripherals** (`cl_hw` subclasses) that attach ROB3 board
+**Loadable ucSim peripherals** (`cl_hw` subclasses) that attach ROB3 board
 hardware to the simulated 8031, so the real firmware talks to modelled devices
 instead of relying on hand-injected debugger state.
+
+These are built as external shared objects (`.so`) against the **ucSim plugin
+SDK** and loaded at runtime with `loadhw` — they are **no longer compiled into**
+`ucsim_51`. The SDK lives in and is installed by the ucSim tree
+(`ucsim/sdk/`, `make install`); see that SDK's `README.md`.
 
 Each module lives in its own subfolder with its own README:
 
@@ -12,41 +17,45 @@ Each module lives in its own subfolder with its own README:
 | ADC | `cl_adc` | [`adc/`](adc/) | Models the ADC0808/0809; serves per-channel feedback and **asserts EOC → INT1**, letting the ROM **free-run past the init gate** from a plain `reset; run`. |
 | Loopback | `cl_loopback` | [`loopback/`](loopback/) | Models the **RS-232 shorting connector** / MM74C04N #1 conditioning: holds P3.2 (INT0/EMERGENCY-OFF) and P3.4 (T0/poll-gate) HIGH so the ROM leaves the emergency-off handler and reaches the teachbox poll. |
 
-Build instructions (shared) are below; module-specific behaviour, commands, and
-verification are in each subfolder's README.
+Module-specific behaviour, commands, and verification are in each subfolder's
+README.
 
-## Building a custom `ucsim_51` with these modules
+## Prerequisite: install the ucSim SDK (one time)
 
-Requires the ucSim source (this project was developed against Daniel Drotos'
-ucSim **0.9.9**, e.g. a checkout at `~/github/danieldrotos/ucsim`).
+The loader (`loadhw`/`insmod` + `-rdynamic`/`-ldl`) is compiled into `ucsim_51`,
+and the SDK headers are installed, by building/installing ucSim:
 
-1. Copy the module sources into the 8051 sim source tree:
-   ```bash
-   cp teachbox/teachbox.cc teachbox/teachboxcl.h  <ucsim>/src/sims/s51.src/
-   cp adc/adc.cc           adc/adccl.h            <ucsim>/src/sims/s51.src/
-   cp loopback/loopback.cc loopback/loopbackcl.h  <ucsim>/src/sims/s51.src/
-   ```
-2. Add the objects to the build — in `src/sims/s51.src/objs.mk`, append
-   `teachbox.o adc.o loopback.o` to the `OBJECTS` list.
-3. Register the hw — in `src/sims/s51.src/uc51.cc`:
-   - add the includes near the other hw includes:
-     ```cpp
-     #include "teachboxcl.h"
-     #include "adccl.h"
-     #include "loopbackcl.h"
-     ```
-   - at the end of `cl_51core::mk_hw_elements()` (after the interrupt hw):
-     ```cpp
-     { class cl_hw *tb  = new cl_teachbox(this); add_hw(tb);  tb->init();  }
-     { class cl_hw *adc = new cl_adc(this);      add_hw(adc); adc->init(); }
-     { class cl_hw *lb  = new cl_loopback(this); add_hw(lb);  lb->init();  }
-     ```
-   (Add only the module(s) you want; each is independent.)
-4. Configure and build:
-   ```bash
-   cd <ucsim> && ./configure && make -C src/sims/s51.src
-   ```
-   Produces `src/sims/s51.src/ucsim_51`.
+```bash
+cd <ucsim>            # e.g. ~/github/razr/ucsim
+./configure --prefix=/usr/local
+make
+sudo make install     # installs ucsim_51 AND the plugin SDK
+```
+
+This puts the flat SDK headers at `/usr/local/include/ucsim` and the build
+fragment at `/usr/local/share/ucsim/sdk/ucsim-plugin.mk`.
+
+## Build these plugins
+
+```bash
+make                                   # against the /usr/local installed SDK
+make UCSIM_PREFIX=/opt/ucsim           # a different install prefix
+make SDK=<ucsim>/sdk                   # against an in-tree (non-installed) SDK
+                                       #   (run <ucsim>/sdk/export-headers.sh first)
+```
+
+Produces `loopback/loopback.so`, `adc/adc.so`, `teachbox/teachbox.so`.
+
+## Load and use at runtime
+
+```
+ucsim_51 -t 51
+> loadhw "teachbox/teachbox.so"        # alias: insmod
+load hw: .../teachbox.so loaded (id_string=teachbox)
+> set hardware teachbox 4 2            # (module-specific args; see subfolder README)
+```
+
+Load each module you need. They are independent.
 
 ## Running (gotchas that apply to every module)
 
@@ -57,14 +66,17 @@ ucSim **0.9.9**, e.g. a checkout at `~/github/danieldrotos/ucsim`).
   (This was the real cause of the "no output / crash", NOT curses.)
 - **Curses is a non-issue.** A curses-linked build and a no-curses build behave
   the same for scripted stdin once the `@` filename is fixed.
-- **Opt-in tests.** The module tests (`make sim-teachbox-module`, `make sim-adc`)
-  need this custom `ucsim_51`. Point them at it with
-  `UCSIM_51=/path/to/ucsim_51` (or put it first on `PATH`); they **skip**
-  cleanly if it isn't found, so a stock-`s51` `make test` still passes.
+- **Don't also compile a module in.** `set hardware <name>` needs a unique
+  `id_string`; a module both compiled into `ucsim_51` *and* loaded resolves to
+  "no hw". These are loadable-only now.
+- **C++ ABI lockstep.** A `.so` only works with a `ucsim_51` built from the same
+  headers/compiler/`./configure` options. Rebuild the plugins (and re-install
+  the SDK) after a ucSim change.
 
 ## How reads/writes dispatch (for maintainers)
 
 `cl_memory_cell::read()` calls **every** registered hw operator in order and
-returns the **last** one's value; `add_hw` appends, so the hw registered *last*
-wins. Both modules are added after the core `cl_port`/XRAM handlers, so their
-`read()` returns are authoritative on the cells they register.
+returns the **last** one's value. A runtime-loaded plugin is `add_hw`'d after
+the core `cl_port`/XRAM handlers, so its `read()` return is authoritative on the
+cells it registers — same "last wins" rule as the old compile-in modules. If a
+module must intercept the very first fetch, `loadhw` it before `run`/`reset`.

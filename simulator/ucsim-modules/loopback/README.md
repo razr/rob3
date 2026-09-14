@@ -68,14 +68,15 @@ right way across scan passes before `kbd_handle` (`0x0C80`) is called. That is a
 firmware-timing characterization, separate from this module. See the main-loop
 "GATE 4" note in the annotated disassembly.
 
-## Build / register
+## Build / load
 
-Same flow as the other modules (see `../README.md`):
+Built as a loadable plugin against the installed ucSim SDK (see `../README.md`):
 
 ```bash
-cp loopback.cc loopbackcl.h  <ucsim>/src/sims/s51.src/
-# objs.mk:  add  loopback.o  to OBJECTS
-# uc51.cc:  #include "loopbackcl.h"  and, in cl_51core::mk_hw_elements():
-#     { class cl_hw *lb = new cl_loopback(this); add_hw(lb); lb->init(); }
-cd <ucsim> && make -C src/sims/s51.src
+cd ..                 # simulator/ucsim-modules/
+make                  # -> loopback/loopback.so  (needs the ucSim SDK installed)
+
+# then in ucsim_51:
+#   loadhw "loopback/loopback.so"
+#   set hardware loopback on
 ```

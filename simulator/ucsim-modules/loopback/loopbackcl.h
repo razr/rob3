@@ -1,6 +1,6 @@
 /*
  * ucsim RS-232-shorting-connector / MM74C04N #1 loopback peripheral for the
- * ROB3 board (header).
+ * ROB3 board (header) — LOADABLE PLUGIN version.
  *
  * Models the pin-level effect of the required "RS-232 shorting connector":
  * on the real board the emergency-off line (P3.2/INT0) and the teachbox-poll
@@ -39,4 +39,4 @@ public:
 
 #endif
 
-/* End of s51.src/loopbackcl.h */
+/* End of loopbackcl.h */

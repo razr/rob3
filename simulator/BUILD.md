@@ -54,7 +54,7 @@ rob3/
     ├── teachbox_scan.a51        # byte-exact keypad-scanner transcription
     ├── gen_init.py              # regenerates the .a51 transcriptions from the ROM
     ├── build/                   # (generated) .rel/.ihx/.bin, rob3.hex, sim inputs
-    ├── ucsim-modules/            # compiled cl_hw peripherals (teachbox/, adc/)
+    ├── ucsim-modules/            # loadable cl_hw plugins (teachbox/, adc/, loopback/)
     └── tests/
         ├── sim_init.sh          # behavioral: init blocks at the ADC/INT1 gate
         └── sim_run.sh           # behavioral: init completes into the main loop
@@ -132,7 +132,7 @@ In brief:
   `0x074B` with the axis speed table seeded.
 
 The injected stimuli are **test scaffolding**, not claims about the silicon.
-The compiled `cl_adc` peripheral in `ucsim-modules/adc/` replaces this scaffolding
+The `cl_adc` loadable plugin in `ucsim-modules/adc/` replaces this scaffolding
 with a real ADC/EOC model so the ROM can free-run; see that module's README.
 Full per-test detail — every assertion, the injection mechanics, how to run a
 test standalone, and how to read failures — lives in
@@ -150,7 +150,8 @@ test standalone, and how to read failures — lives in
 - Stock ucSim models the MCS-51 core only; external peripherals (8255, ADC,
   SRAM, 74LS138 decode) are **not** modeled, which is why the behavioral tests
   are structured around the hardware-dependent gates. The `ucsim-modules/`
-  peripherals (teachbox, adc) add those models to a custom `ucsim_51`.
+  peripherals (teachbox, adc, loopback) add those models as loadable plugins
+  (`loadhw`) to a ucSim built with the plugin loader.
 
 ## Manual simulator poking
 

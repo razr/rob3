@@ -18,10 +18,12 @@
  *     row   = 0..7 (74LS138 output /Y0../Y7)
  *     group = 1..3 (column group; P1 bit 5/6/7). group 0 = no key pressed.
  *
- * This is a compile-time ucsim module; add it in cl_51core::mk_hw_elements().
+ * This is a LOADABLE ucsim plugin (built against the installed ucSim SDK and
+ * loaded at runtime with `loadhw teachbox.so`). See ../README.md.
  */
 
 #include <stdio.h>
+#include "ucsim_hw_plugin.h"
 #include "argcl.h"
 #include "regs51.h"
 #include "types51.h"
@@ -124,5 +126,7 @@ cl_teachbox::print_info(class cl_console_base *con)
   con->dd_printf("  pressed: row=%d group=%d (last strobe=0x%02x, row=%d)\n",
 		 press_row, press_group, cur_strobe, strobed_row());
 }
+
+UCSIM_HW_PLUGIN(cl_teachbox)
 
 /* End of teachbox.cc */

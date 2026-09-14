@@ -53,10 +53,12 @@
  *   set hardware adc <ch> <value>   set pot[ch] = value (0..255)
  *   set hardware adc                 (no args) print state
  *
- * This is a compile-time ucsim module; register it in cl_51core::mk_hw_elements().
+ * This is a LOADABLE ucsim plugin (built against the installed ucSim SDK and
+ * loaded at runtime with `loadhw adc.so`). See ../README.md.
  */
 
 #include <stdio.h>
+#include "ucsim_hw_plugin.h"
 #include "argcl.h"
 #include "regs51.h"
 #include "types51.h"
@@ -189,5 +191,7 @@ cl_adc::print_info(class cl_console_base *con)
     con->dd_printf(" %02x", pot[i]);
   con->dd_printf("\n");
 }
+
+UCSIM_HW_PLUGIN(cl_adc)
 
 /* End of adc.cc */

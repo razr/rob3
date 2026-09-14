@@ -34,11 +34,13 @@
  *   set hardware loopback on|off        enable/disable the drive (default on)
  *   set hardware loopback <maskbyte>    set which P3 bits to force HIGH
  *
- * This is a compile-time ucsim module; add it in cl_51core::mk_hw_elements().
+ * This is a LOADABLE ucsim plugin (built against the installed ucSim SDK and
+ * loaded at runtime with `loadhw loopback.so`). See ../README.md.
  */
 
 #include <stdio.h>
 #include <string.h>
+#include "ucsim_hw_plugin.h"
 #include "argcl.h"
 #include "regs51.h"
 #include "types51.h"
@@ -144,5 +146,7 @@ cl_loopback::print_info(class cl_console_base *con)
   con->dd_printf("  enabled=%d  P3 drive mask=0x%02x (P3.2 EMO, P3.4 pollgate)\n",
 		 enabled, (unsigned)drive_mask);
 }
+
+UCSIM_HW_PLUGIN(cl_loopback)
 
 /* End of loopback.cc */

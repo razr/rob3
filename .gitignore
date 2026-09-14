@@ -31,3 +31,6 @@
 # Python bytecode
 __pycache__/
 *.pyc
+
+# Compiled ucSim hardware plugins (build artifacts; built via ucsim-modules/Makefile)
+/simulator/ucsim-modules/**/*.so
