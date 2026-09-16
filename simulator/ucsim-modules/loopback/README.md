@@ -1,19 +1,36 @@
 # ROB3 loopback module (`cl_loopback`)
 
+> **Not a data loopback.** Despite the name, this module does **not** echo
+> TX→RX (P3.0/RXD). It reproduces only the *gate side-effect* of the ROB3
+> "9-pin shorting connector": forcing **P3.2** (EMERGENCY-OFF) and **P3.4**
+> (poll enable) to the level that lets the ROM reach `tb_poll`. Modelling a
+> real serial loopback would be incorrect here (the blocking gates are P3.2/
+> P3.4, not P3.0). Full electrical trace and the open "why is the connector
+> required" question:
+> [`../../../hardware/connectors/rs232-shorting-connector.md`](../../../hardware/connectors/rs232-shorting-connector.md).
+
 Models the pin-level effect of the **RS-232 shorting connector** that the ROB3
 requires to run (hardware/teachbox/README.md, "Hardware requirements"). On the
-real board, **MM74C04N #1** (hardware/board/MM74C04N.md) conditions three 8031
-Port-3 inputs:
+real board, **MM74C04N #1** (hardware/board/MM74C04N.md) conditions these 8031
+Port-3 inputs the firmware cares about:
 
-| Pin | 8031 | Role |
-| :-- | :--- | :--- |
-| P3.2 | INT0 | DB25 pin 4 **EMERGENCY-OFF** (active LOW) |
-| P3.4 | T0   | teach-pendant poll enable gate |
-| P3.0 | RXD  | baud strap |
+| Pin | 8031 | Source on the board | Driven by this module? |
+| :-- | :--- | :------------------ | :--------------------- |
+| P3.2 | INT0 | **DB25 pin 4 EMERGENCY-OFF** (STOP path), active LOW | yes — forced HIGH |
+| P3.4 | T0   | **DB9 pin 4** teach-poll enable gate | yes — forced HIGH |
+| P3.0 | RXD  | DB9 pin 2 serial / baud strap | **no — left alone** |
 
-With the shorting connector present these lines sit HIGH, so the firmware
-(1) leaves the EMERGENCY-OFF handler at `0x0040`, and (2) passes the
-`JB P3.4, tb_poll` gate at `0x07AB` and actually scans the keypad.
+Note P3.2 is set on the real board by the **DB25 STOP path**, not by the RS-232
+(DB9) connector; the module forces it HIGH anyway so the sim can run without a
+STOP model. The exact DB9 strap the real shorting connector uses (and its
+polarity) is **unresolved** — see
+[`../../../hardware/connectors/rs232-shorting-connector.md`](../../../hardware/connectors/rs232-shorting-connector.md).
+This module is a **simulation aid** that forces the correct 8031-pin end state,
+not a wiring-accurate model of the connector.
+
+With those gates HIGH the firmware (1) leaves the EMERGENCY-OFF handler at
+`0x0040`, and (2) passes the `JB P3.4, tb_poll` gate at `0x07AB` and actually
+scans the keypad.
 
 ## Why it's needed in ucSim
 
@@ -70,11 +87,14 @@ firmware-timing characterization, separate from this module. See the main-loop
 
 ## Build / load
 
-Built as a loadable plugin against the installed ucSim SDK (see `../README.md`):
+Built as a loadable plugin against the ucSim SDK (see `../README.md` for
+details). In this checkout the SDK is the in-tree one at
+`~/github/razr/ucsim/sdk` (not installed to `/usr/local`), so pass `SDK=`:
 
 ```bash
 cd ..                 # simulator/ucsim-modules/
-make                  # -> loopback/loopback.so  (needs the ucSim SDK installed)
+make SDK="$HOME/github/razr/ucsim/sdk"      # -> loopback/loopback.so
+# (or `make` alone if the SDK is installed under /usr/local)
 
 # then in ucsim_51:
 #   loadhw "loopback/loopback.so"

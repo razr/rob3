@@ -1,6 +1,16 @@
 /*
  * ucsim RS-232-shorting-connector / MM74C04N #1 loopback peripheral for ROB3.
  *
+ * NAMING / SCOPE (read this first)
+ *   Despite the name, this does NOT model an RS-232 *data* loopback (TX<->RX
+ *   echo on P3.0/RXD). It models only the *pin-level side effect* the ROB3
+ *   "9-pin shorting connector" has via MM74C04N #1: forcing the two Port-3
+ *   GATE inputs the firmware waits on to the level that lets the ROM reach the
+ *   Teachbox poll. Modelling a real TX<->RX echo would be WRONG here: the
+ *   blocking gates are P3.2 (EMERGENCY-OFF) and P3.4 (poll enable), NOT P3.0.
+ *   Full electrical trace + the still-open "why is the connector required"
+ *   question: hardware/connectors/rs232-shorting-connector.md.
+ *
  * WHY THIS EXISTS
  *   The ROB3 controller only runs when BOTH the Teachbox AND the "RS-232
  *   shorting connector" are installed (hardware/teachbox/README.md, "Hardware

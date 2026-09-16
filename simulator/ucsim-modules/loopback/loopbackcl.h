@@ -2,12 +2,15 @@
  * ucsim RS-232-shorting-connector / MM74C04N #1 loopback peripheral for the
  * ROB3 board (header) — LOADABLE PLUGIN version.
  *
- * Models the pin-level effect of the required "RS-232 shorting connector":
- * on the real board the emergency-off line (P3.2/INT0) and the teachbox-poll
- * enable (P3.4/T0) — both conditioned by MM74C04N #1 — read HIGH when the
- * shorting connector is present. Without it the firmware sits in the
- * EMERGENCY-OFF handler and never polls the keypad. This module drives those
- * P3 input pins HIGH so the ROM runs as it does on a properly-connected bench.
+ * Simulation aid, NOT a wiring-accurate connector model. It forces the two
+ * Port-3 GATE inputs the firmware waits on — P3.4 (T0, teachbox-poll enable)
+ * and P3.2 (INT0, EMERGENCY-OFF) — to the level that lets the ROM leave the
+ * EMERGENCY-OFF handler and reach the keypad poll. It does NOT echo TX<->RX
+ * (P3.0/RXD is left alone) and it does NOT reproduce the connector's real DB9
+ * strap (whose exact wiring/polarity is still unresolved — see
+ * hardware/connectors/rs232-shorting-connector.md). It drives the 8031-pin end
+ * state HIGH, which is the correct outcome for the sim regardless of how the
+ * real connector achieves it.
  */
 
 #ifndef LOOPBACK_HEADER
