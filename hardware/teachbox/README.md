@@ -22,6 +22,15 @@ When IBM and Microsoft trademarks are mentioned in the text, this is understood 
 
 Travel within the working range of each of the ROB3i's six axes is divided into 512 individual steps.
 
+> **Model scope — ROB3i vs ROB3.** The specifications in this section
+> (POS 0..511, "512 individual steps", $512^5$ points) are transcribed from the
+> **ROB3i** (newer model) documentation. The **original ROB3** firmware in this
+> repository works in **8-bit position values (0..255)** — its axis target and
+> feedback bytes are single bytes (see
+> `../../firmware/src/annotated/ext1_axis_servo.annotated.asm`). So on a ROB3,
+> read these 0..511 ranges as the ROB3i's higher-resolution scale, not as the
+> range this ROM uses.
+
 | Axis | | Relative End Position | | | Angular Range |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | 1 Base rotation | right: | POS 0 | left: | POS 511 | 200 degrees |

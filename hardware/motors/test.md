@@ -92,6 +92,90 @@ The motor works, the potentiometer can rotate from 0 to 1023. Set it back. Now i
 | **Opened / Closed (Base)** | 765 | **0 mm** |
 | **Closed / Opened (Target)** | 206 | **60 mm** |
 
+## Angle/position ↔ ROB3 count mapping (worked examples)
+
+The ROB3 firmware commands and servos axes in **raw 8-bit ADC counts (0..255)**,
+not in degrees or mm (see
+`../../firmware/src/annotated/ext1_axis_servo.annotated.asm`). The pots are
+**absolute** transducers, so there is no homing — a count *is* the position.
+Converting a physical angle/position to a `POS a . <count>` value (or a reading
+back to an angle) is a **per-axis linear interpolation** between two measured
+points:
+
+```
+count  = count_A + (angle - angle_A) * (count_B - count_A) / (angle_B - angle_A)
+angle  = angle_A + (count - count_A) * (angle_B - angle_A) / (count_B - count_A)
+```
+
+where (angle_A, count_A) and (angle_B, count_B) are two measured calibration
+points for that axis. The ROB3 count = Arduino 10-bit reading / 4.
+
+Key gotchas the measured data shows: **0° is NOT count 128**, each axis uses only
+a **sub-range** of 0..255, and the **direction can be inverted** (higher count =
+more negative). So every axis needs its OWN two measured points.
+
+### Example A — Shoulder (axis 2), from measured data above  [HW-bench]
+
+Points: +70° → 127 (0x7F), 0° → 154 (0x9A), −44° → 188 (0xBC).
+Slope over the span = (188 − 127) / (−44 − 70) ≈ **−0.535 count/deg** (note: count
+*rises* as angle goes negative).
+
+- Command **+35°**: count = 127 + (35 − 70)(−0.535) ≈ **146 (0x92)** → `POS 2 . 146`
+- Read **170** back: angle = 70 + (170 − 127)/(−0.535) ≈ **−10°**
+
+### Example B — Gripper (axis 6), from measured data above  [HW-bench]
+
+Points: 0 mm → raw 765 → **191 (0xBF)**, 60 mm → raw 206 → **52 (0x34)**.
+Slope = (52 − 191) / (60 − 0) ≈ **−2.32 count/mm** (count falls as it opens).
+
+- Command **30 mm**: count = 191 + 30(−2.32) ≈ **122 (0x7A)** → `POS 6 . 122`
+
+### Example C — a ±130° axis (NOT yet measured — MEASURE ME)
+
+If you have an axis with, say, a **−130° … +130°** range, its endpoint counts are
+**unknown until measured** — do NOT assume 0° = 128 or a full 0..255 span. Drive
+the joint to each limit, read the count with `pot_reader`, then interpolate.
+Illustrative ONLY (placeholder counts, not real):
+
+```
+measure:  -130° -> count 30 ,  +130° -> count 225        (EXAMPLE numbers)
+slope   = (225 - 30) / (130 - (-130)) = 195 / 260 = 0.75 count/deg
+0°   -> 30 + (0 - (-130)) * 0.75  = 128 (0x80)
++65° -> 30 + (65 + 130) * 0.75    = 176 (0xB0)
+```
+
+Replace the placeholder 30/225 with the axis's real measured endpoints before
+trusting any result. These per-axis points are what `arduino/pot_reader/rob3_axis.h`
+stores in `AXIS_CAL[0..5]`.
+
+## ⚠️ Safety: the firmware does NOT enforce per-axis travel limits
+
+Traced in `../../firmware/src/main.asm` (the `POS a . n ENT` value-entry path):
+the firmware validates only that **the value is 0..255** (the decimal
+accumulator at `jump_0D65`/`jump_0D78` does `*10 + digit` and jumps to the ERR
+handler `jump_0D23` on byte overflow) and that **the axis is 1..6**
+(`jump_0CA3`: `dec A / cjne #06 / jnc -> ERR`). The accepted 0..255 value is then
+stored **straight into target[a] with NO per-axis min/max check**. [BYTE]
+
+Consequences — do NOT treat 0..255 as safe:
+
+- 0..255 is the **electrical pot range**, which is **wider than an axis's usable
+  mechanical travel**. Each axis only sweeps a **sub-range** of 0..255 (e.g. the
+  measured shoulder ~127..188, elbow ~67..159 above).
+- Commanding a count outside that axis's usable window drives the joint **into a
+  hard stop**: the servo chases a target the pot can never read, so the motor
+  keeps driving and **stalls against the endstop** (overcurrent/heat).
+- There are **no software soft-limits** in the ROM. YOU must keep every
+  `POS a . n` within that axis's measured `[min_count, max_count]`. This is
+  exactly why the Arduino `motor_control` sketch adds its own ±limit watchdog.
+
+Practical rule: for each axis, measure the count at both **safe** mechanical
+limits with `pot_reader`, record `[min_count, max_count]`, and only issue counts
+inside that window. (Provenance: the "value 0..255 + axis 1..6, no position
+clamp" behavior is [BYTE]; "no clamp anywhere in the ROM" is [INFER] — the
+POS-entry, axis-select, and target-store paths were traced, but a negative
+across the entire ROM is not exhaustively proven.)
+
 ### Sketch
 
 ```cpp
