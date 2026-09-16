@@ -13,10 +13,10 @@ BUG
 REPRO (no ROM needed)
   Start a free-running `run`, then — while it is running (console frozen) — send
   an interrupting line:
-      echo SENTINEL_ABC
+      echo TEST_MSG
   Correct behaviour: the arriving line stops the run AND is then executed, so
-  SENTINEL_ABC prints. Buggy behaviour: the line is drained by read_line() on the
-  resUSER stop (sim.cc ~L258) and never executed, so SENTINEL_ABC never appears.
+  TEST_MSG prints. Buggy behaviour: the line is drained by read_line() on the
+  resUSER stop (sim.cc ~L258) and never executed, so TEST_MSG never appears.
   We then confirm the SAME `echo`, sent again once the sim is stopped, DOES
   print — proving it is the pipelining/interrupt path, not the command, at fault.
 
@@ -36,7 +36,7 @@ import sys
 import time
 
 PROMPT = "$"          # ucSim's default prompt tail; we match on the marker echo
-MARK = "SENTINEL_ABC"
+MARK = "TEST_MSG"
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 

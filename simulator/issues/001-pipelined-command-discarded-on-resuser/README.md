@@ -33,6 +33,32 @@ command (interrupt *and* run it).
 
 ## Reproduction
 
+### Quick manual check (no Python, no ROM)
+
+You don't need the script to convince yourself — reproduce it by hand in an
+interactive console. *You* supply the timing by typing the second line only
+after the run is already going (console frozen):
+
+```
+ucsim_51 -t 51
+> run                         # free-runs; the console is now FROZEN
+  (now type the next line and press Enter WHILE it is running:)
+echo TEST_MSG
+```
+
+- **Buggy:** you get the `... (105) User stopped` line, but `TEST_MSG` is
+  **not** printed as command output — the interrupting command was swallowed.
+- **Fixed:** `TEST_MSG` prints (the command both stopped the run *and* ran).
+
+Sanity check: after it has stopped, send `echo TEST_MSG` again on its own —
+it prints normally, proving it's the pipeline/interrupt path at fault, not the
+command.
+
+> A bare `ENTER` (empty line) should still just stop the run in both buggy and
+> fixed builds — only a *non-empty* interrupting line is affected.
+
+### Scripted reproduction (self-checking, for upstream)
+
 No ROM required — pure console behaviour:
 
 ```bash
@@ -40,8 +66,10 @@ UCSIM_51=/path/to/ucsim_51 python3 repro.py
 # exit 0 = bug reproduced ; exit 1 = fixed/not reproduced ; exit 2 = no sim found
 ```
 
-`repro.py` starts a free-running `run`, then (while frozen) sends
-`echo SENTINEL_ABC` as the interrupting line. It distinguishes the `echo`
+`repro.py` uses a pty (faithful interactive console) and a short delay to land
+the interrupting line while the run is frozen — the same timing you do by hand
+above, made deterministic. It starts a free-running `run`, then sends
+`echo TEST_MSG` as the interrupting line, and distinguishes the `echo`
 **command output** from the pty's **input echo** by checking for the marker only
 *after* the `User stopped` line.
 
