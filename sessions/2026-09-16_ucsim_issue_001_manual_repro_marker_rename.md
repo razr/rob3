@@ -30,3 +30,21 @@ The manual method works because the human supplies the timing (type the second
 line only after `run` is already going). Over a plain pipe/heredoc all lines
 arrive before the console freezes, which is exactly why the script uses a pty +
 `sleep` — documented in the README's scripted section.
+
+## Follow-up: explicit expected-vs-actual behavior
+
+Discussion clarified *why* it's a bug (not just a scriptable quirk): a knowing
+script sidesteps it, but the input is dropped **silently**, and the code
+conflates two intents. Added an **"Expected vs. actual behavior"** table to the
+issue README:
+
+- **bare `ENTER`** while a run/step executes → interrupt the run, nothing else
+  (correct today).
+- **`<cmd>` + `ENTER`** (non-empty) → should interrupt the run **and then
+  execute `<cmd>`**, as if entered at the resulting stopped prompt; today it
+  interrupts but **discards `<cmd>` unexecuted** (the bug).
+
+The bare-ENTER behavior is fine and should stay; the defect is only the
+non-empty case. Also noted the observed env runs uCsim **0.8.5** on PATH (older
+than the 0.9.9 source tree the plugins are built against) — a version mismatch
+to keep in mind, plugins are ABI-locked to 0.9.9.

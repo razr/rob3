@@ -24,6 +24,22 @@ Net effect: the command that interrupted the run is **silently swallowed**. A
 harness that writes `"<run/step>\n<next command>\n"` in one go loses
 `<next command>`, and any downstream read for its output hangs until timeout.
 
+## Expected vs. actual behavior
+
+Sending a line on a frozen console has two distinct intents that the code
+conflates:
+
+| Input while a run/step is executing | Expected | Actual (0.9.9) |
+| :---------------------------------- | :------- | :------------- |
+| **bare `ENTER`** (empty line) | interrupt the run, do nothing else | interrupt the run ✔ (correct) |
+| **`<cmd>` + `ENTER`** (non-empty) | interrupt the run **and then execute `<cmd>`** | interrupt the run, then **discard `<cmd>` unexecuted** (bug) |
+
+The bare-`ENTER`-interrupts-a-run behavior is fine and should stay. The defect
+is only in the **non-empty** case: a real command typed to interrupt a run is
+consumed as the interrupt keystroke and never interpreted. The correct contract
+is "a non-empty interrupting line stops the run *and* is then run", exactly as
+if it had been entered at the resulting stopped prompt.
+
 ## Root cause
 
 `proc_input`'s frozen branch is an early-out: it stops the sim but never runs
