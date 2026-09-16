@@ -33,6 +33,8 @@
 ;   R6     : key index accumulator during the scan (0..0x18 = 0..24)
 ;==============================================================================
 
+        .include "rob3.inc"         ; symbolic names for IRAM/flags/SFRs/devices
+
 
 ;==============================================================================
 ; MAIN-LOOP CALL SITE  (0x07C4)                                          [BYTE]
@@ -46,7 +48,7 @@ tb_poll:
         jz      tb_poll_done        ; 60 03     A==0 -> no new key, skip
         lcall   kbd_handle          ; 12 0C 80  -> process the captured key (0x0C80)
 tb_poll_done:
-        setb    0xA8.7              ; D2 AF     EA = 1 (re-enable interrupts)
+        setb    IE_EA               ; 0xA8.7 (D2 AF)  EA = 1 (re-enable interrupts)
         ajmp    0x074D              ; E1 4D     back to the main loop
 
 
@@ -60,16 +62,16 @@ tb_poll_done:
         org     0x0BFF
         ; 0x0BFF: FF  (padding byte, MOV R7,A; the routine is CALLED at 0x0C00)
 kbd_scan:                           ; entry = 0x0C00
-        jbc     0x20.1,kbd_evt      ; 10 01 61  if kbd-event flag set: clear it
+        jbc     SYS_KBD_EVENT_B,kbd_evt ; 0x20.1 (10 01 61) if kbd-event flag set: clear it
                                     ;           and take the event path (0x0C64)
-        mov     0x83,#0x51          ; 75 83 51  DPH=0x51 -> 8255 Port B (5100H) [HW]
+        mov     SFR_DPH,#DEV_8255_PB ; 0x83=0x51 (75 83 51) DPH -> 8255 Port B (5100H) [HW]
         mov     R6,#0x00            ; 7E 00     R6 = running key index = 0
-        mov     A,0x47              ; E5 47     A = current LED/row latch value
+        mov     A,LED_LATCH         ; 0x47 (E5 47)  A = current LED/row latch value
         anl     A,#0x0F             ; 54 0F     keep low nibble = row strobe seed
 row_loop:
         movx    @DPTR,A             ; F0        drive the row strobe via the 8255
-        mov     0x46,A              ; F5 46     remember the strobe pattern
-        mov     A,0x90              ; E5 90     read column returns from P1 [HW]
+        mov     KBD_STROBE,A        ; 0x46 (F5 46)  remember the strobe pattern
+        mov     A,SFR_P1            ; 0x90 (E5 90)  read column returns from P1 [HW]
         anl     A,#0xE0             ; 54 E0     keep top 3 bits = the 3 col groups
         jz      no_hit              ; 60 1A     no column low -> nothing in this row
         jb      0xE0.5,grp_hi       ; 20 E5 04  ACC.5 set -> group in the high pair
@@ -82,7 +84,7 @@ grp_hi:
 grp_done:
         xch     A,R6                ; CE        stage the group bits vs the index
         jnz     kbd_new             ; 70 2B     a real hit -> accept as new key
-        mov     A,0x46              ; E5 46     recompute index from strobe...
+        mov     A,KBD_STROBE        ; 0x46 (E5 46)  recompute index from strobe...
         swap    A                   ; C4
         anl     A,#0x07             ; 54 07     row number 0..7
         inc     A                   ; 04
@@ -91,35 +93,35 @@ grp_done:
         add     A,#0xE7             ; 24 E7     (index - 0x19): test past 25 keys
         jc      kbd_new             ; 40 1F     wrapped past the last key -> accept
 no_hit:
-        mov     A,0x46              ; E5 46     advance the row strobe...
+        mov     A,KBD_STROBE        ; 0x46 (E5 46)  advance the row strobe...
         add     A,#0x10             ; 24 10     next matrix row (bit into 0x10 step)
         jnb     0xE0.7,row_loop     ; 30 E7 D6  more rows to scan -> loop
         ; --- scan finished with no new column hit: run the debounce logic ---
-        mov     A,0x47              ; E5 47     restore the idle LED/row latch
+        mov     A,LED_LATCH         ; 0x47 (E5 47)  restore the idle LED/row latch
         movx    @DPTR,A             ; F0        ...drive it back out
         mov     A,R6                ; EE        A = key index found this pass
-        xch     A,0x56              ; C5 56     swap with the previous index (0x56)
-        cjne    A,0x56,key_changed  ; B5 56 17  changed vs last pass? -> key_changed
+        xch     A,KBD_DEBOUNCE0     ; 0x56 (C5 56)  swap with the previous index
+        cjne    A,KBD_DEBOUNCE0,key_changed ; 0x56 (B5 56 17) changed vs last pass?
         jz      key_release         ; 60 1C     both zero -> nothing held (release)
-        jnb     0x20.6,ret_zero     ; 30 06 1B  not flagged held -> return 0
-        jnb     0x20.5,key_repeat   ; 30 05 1A  auto-repeat pending? -> key_repeat
-        djnz    0x57,ret_zero       ; D5 57 15  count down repeat timer -> return 0
-        mov     0x57,#0x03          ; 75 57 03  reload repeat timer
+        jnb     SYS_FLAG_B6,ret_zero ; 0x20.6 (30 06 1B) not flagged held -> return 0
+        jnb     SYS_FLAG_B5,key_repeat ; 0x20.5 (30 05 1A) auto-repeat pending?
+        djnz    KBD_DEBOUNCE1,ret_zero ; 0x57 (D5 57 15) count down repeat timer
+        mov     KBD_DEBOUNCE1,#0x03 ; 0x57 (75 57 03)  reload repeat timer
         ret                         ; 22        (A holds the repeating key index)
 
 kbd_new:
-        mov     0x56,#0xFF          ; 75 56 FF  mark "previous index" invalid
-        mov     A,0x47              ; E5 47     restore idle latch...
+        mov     KBD_DEBOUNCE0,#0xFF ; 0x56 (75 56 FF)  mark "previous index" invalid
+        mov     A,LED_LATCH         ; 0x47 (E5 47)  restore idle latch...
         movx    @DPTR,A             ; F0
         sjmp    ret_zero            ; 80 09     debounce: report nothing THIS pass
 
 key_changed:
-        clr     0x20.5              ; C2 05     clear the auto-repeat-pending flag
-        mov     0x57,#0x23          ; 75 57 23  set initial key-repeat delay (35)
+        clr     SYS_FLAG_B5         ; 0x20.5 (C2 05)  clear the auto-repeat-pending flag
+        mov     KBD_DEBOUNCE1,#0x23 ; 0x57 (75 57 23)  set initial key-repeat delay (35)
         sjmp    ret_zero            ; 80 02
 
 key_release:
-        setb    0x20.6              ; D2 06     mark "no key held" state
+        setb    SYS_FLAG_B6         ; 0x20.6 (D2 06)  mark "no key held" state
 key_repeat:
         clr     A                   ; E4        return A = 0 (no new key)
 ret_zero:
@@ -140,7 +142,7 @@ ret_zero:
 ;------------------------------------------------------------------------------
 
 key_hold_clear:
-        clr     0x20.6              ; C2 06
+        clr     SYS_FLAG_B6         ; 0x20.6 (C2 06)
         ret                         ; 22
 
 ;------------------------------------------------------------------------------
@@ -167,8 +169,8 @@ kbd_evt:
         mov     A,#0x19             ; 74 19     A = 0x19 (sentinel index)
         ; 0x0C66 onward overlaps the next label:
         mov     R6,A                ; FE
-        mov     0x56,A              ; F5 56     previous index = 0x19
-        clr     0x20.6              ; C2 06     clear "key held"
+        mov     KBD_DEBOUNCE0,A     ; 0x56 (F5 56)  previous index = 0x19
+        clr     SYS_FLAG_B6         ; 0x20.6 (C2 06)  clear "key held"
         ret                         ; 22
 
 
@@ -196,20 +198,20 @@ kbd_handle:                         ; entry = 0x0C80
         dec     A                   ; 14        A = keyindex - 1 (0-base the index)
         cjne    A,#0x0E,kh_not_clr  ; B4 0E 09  was it the CLR key? [INFER: CLR=0x0E]
         clr     A                   ; E4        CLR pressed -> reset entry state:
-        mov     0x6D,A              ; F5 6D       clear numeric-arg buffer 0x6D
-        mov     0x2A,A              ; F5 2A       clear editor flag byte 0x2A
-        orl     0x47,#0xF8          ; 43 47 F8    idle the row/LED strobe bits
+        mov     ARG_ACC_LO,A        ; 0x6D (F5 6D)  clear numeric-arg buffer 0x6D
+        mov     EDIT_STATE,A        ; 0x2A (F5 2A)  clear editor flag byte 0x2A
+        orl     LED_LATCH,#0xF8     ; 0x47 (43 47 F8)  idle the row/LED strobe bits
         ret                         ; 22
 
 kh_not_clr:
-        jb      0x2A.7,kh_0cea      ; 20 57 5A  bit 0x57 = 0x2A.7 (arg-entry busy?) [INFER]
-        jb      0x2A.6,kh_ret       ; 20 56 1E  bit 0x56 = 0x2A.6 (already active?) [INFER]
-        setb    0x2A.7              ; D2 57     mark arg-entry busy (bit 0x2A.7)
+        jb      EDIT_ERR_B7,kh_0cea ; 0x2A.7 (bit 0x57) (20 57 5A) arg-entry busy? [INFER]
+        jb      EDIT_ERR_B6,kh_ret  ; 0x2A.6 (bit 0x56) (20 56 1E) already active? [INFER]
+        setb    EDIT_ERR_B7         ; 0x2A.7 (bit 0x57) (D2 57)  mark arg-entry busy
         cjne    A,#0x0A,kh_ax_lo    ; B4 0A 09  key index-1 == 0x0A ? [INFER: mode key]
         ; --- (index-1)==0x0A branch: enter a mode with sub-state 0x20 --------
         mov     R3,#0x20            ; 7B 20
-        mov     0x29,#0x20          ; 75 29 20  mode/sub-state 0x29 = 0x20 [INFER]
-        anl     0x47,#0xF7          ; 53 47 F7
+        mov     EDIT_MODE,#0x20     ; 0x29 (75 29 20)  mode/sub-state 0x29 = 0x20 [INFER]
+        anl     LED_LATCH,#0xF7     ; 0x47 (53 47 F7)
         ret                         ; 22
 
 kh_ax_lo:
@@ -225,10 +227,10 @@ kh_ax_lo:
         dec     A                   ; 14        A = keyindex - 2 = axis number
         cjne    A,#0x06,$+3         ; B4 06 00  set/clear C for the < 6 test
         jnc     kh_0d23             ; 50 7A     axis >= 6 -> not an axis key
-        setb    0x2A.5              ; D2 55     bit 0x55 = 0x2A.5: "axis selected" [INFER]
-        add     A,#0x50             ; 24 50     A = axis + 0x50  -> RAM pointer
+        setb    EDIT_ERR_B5         ; 0x2A.5 (bit 0x55) (D2 55) "axis selected" [INFER]
+        add     A,#CURPOS_BASE      ; 0x50 (24 50)  A = axis + 0x50 -> RAM pointer
         mov     R1,A                ; F9        R1 -> current position of this axis
-        mov     0x29,#0x40          ; 75 29 40  mode 0x29 = 0x40 (POSITION mode) [BYTE]
+        mov     EDIT_MODE,#0x40     ; 0x29 (75 29 40)  mode 0x29 = 0x40 (POSITION mode) [BYTE]
         ; ... POSITION-mode entry established: R1 now points at the selected
         ;     axis's position slot (0x50+axis). The +/- jog (kh_jog below) then
         ;     increments/decrements THAT slot. The POS-digit direct entry
@@ -252,7 +254,7 @@ kh_ax_lo:
 ;==============================================================================
         org     0x0E26
 kh_jog:
-        orl     0x20,#0x60          ; 43 20 60  set flags 0x20.5+0x20.6 (jog active)
+        orl     SYS_FLAGS,#0x60     ; 0x20 (43 20 60)  set flags 0x20.5+0x20.6 (jog active)
         jb      0xE0.0,kh_jog_dec   ; 20 E0 07  ACC.0 == 1 -> decrement path
         ; --- increment (e.g. the '+' direction) ---
         cjne    @R1,#0xFF,kh_jog_inc ; B7 FF 01 already at max? (0xFF)
@@ -267,9 +269,9 @@ kh_jog_dec:
 kh_jog_dodec:
         dec     @R1                 ; 17        axis position -= 1
 kh_jog_move:
-        mov     0x21,#0x00          ; 75 21 00  reset axis-active mask
-        setb    0x2F                ; D2 2F     signal "motion requested"
-        mov     0x19,#0x64          ; 75 19 64  arm the axis watchdog (0x64 ticks)
+        mov     AXIS_ACTIVE,#0x00   ; 0x21 (75 21 00)  reset axis-active mask
+        setb    0x2F                ; D2 2F     signal "motion requested" (0x2F.? bit)
+        mov     0x19,#0x64          ; 75 19 64  arm the axis watchdog (0x19 byte, 0x64 ticks)
         ret                         ; 22        servo ISR (0x00C0) now drives the
                                     ;           motor toward the new @R1 position
 
@@ -299,25 +301,25 @@ kh_jog_move:
         org     0x0D65
 pos_digit:                          ; reached with A = the pressed digit (0..9)
         mov     R6,A                ; FE        R6 = this digit
-        mov     A,0x6D              ; E5 6D     A = current accumulator low byte
+        mov     A,ARG_ACC_LO        ; 0x6D (E5 6D)  A = current accumulator low byte
         mov     B,#0x0A             ; 75 F0 0A  B = 10
         mul     AB                  ; A4        A = low*10 (B = carry-out)
-        jb      0x29.3,pd_add       ; 20 4B 09  bit 0x4B = 0x29.3: two-digit mode?
+        jb      EDIT_MODE_B3,pd_add ; 0x29.3 (bit 0x4B) (20 4B 09) two-digit mode?
         ; --- (single-byte path) store low*10 (+digit handled by caller) -------
         ; (0x0D6F..0x0D74 set/clear flags then fall to the store below)
-        mov     0x6D,A              ; F5 6D     accumulator low = value*10
+        mov     ARG_ACC_LO,A        ; 0x6D (F5 6D)  accumulator low = value*10
         ret                         ; 22
 pd_add:                             ; 0x0D78
         add     A,R6                ; 2E        A = value*10 + digit
-        mov     0x6D,A              ; F5 6D     store new accumulator low
+        mov     ARG_ACC_LO,A        ; 0x6D (F5 6D)  store new accumulator low
         clr     A                   ; E4
         addc    A,B                 ; 35 F0     propagate the *10 carry...
         mov     R6,A                ; FE
-        mov     A,0x6E              ; E5 6E     ...into the high byte:
+        mov     A,ARG_ACC_HI        ; 0x6E (E5 6E)  ...into the high byte:
         mov     B,#0x0A             ; 75 F0 0A
         mul     AB                  ; A4        high = high*10 + carry
         ; 0x0D86.. store high:
-        mov     0x6E,A              ; F5 6E     accumulator high byte
+        mov     ARG_ACC_HI,A        ; 0x6E (F5 6E)  accumulator high byte
         ; (continues into the mode/command dispatch at 0x0D8B)
 
 ;------------------------------------------------------------------------------
@@ -330,7 +332,7 @@ pos_commit:
         mov     A,R4                ; EC        A = axis selector (R4)
         add     A,#0x4F             ; 24 4F     -> 0x4F + R4  (axis slot base)
         mov     R1,A                ; F9        R1 -> axis position slot (0x50+axis)
-        mov     @R1,0x6D            ; A7 6D     @R1 = accumulated value (COMMIT) [SIM]
+        mov     @R1,ARG_ACC_LO      ; 0x6D (A7 6D)  @R1 = accumulated value (COMMIT) [SIM]
         acall   0x0D38              ; D1 38     post-commit housekeeping
         ajmp    0x0884              ; 81 84     back to the editor/dispatch
 

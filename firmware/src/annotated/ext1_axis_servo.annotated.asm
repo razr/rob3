@@ -239,33 +239,35 @@
 ;   before disabling interrupts and running the six-axis setup loop. The
 ;   instructions are [BYTE]; "wait one full sweep" is [INFER] from the rotation.
 ;------------------------------------------------------------------------------
+        .include "rob3.inc"         ; symbolic names for IRAM/flags/SFRs/devices
+
         org     0x00C0
 isr_ext1:
-        push    0xD0                ; save PSW
-        setb    0xD3                ; select register bank 1 (axis ISR bank)
+        push    SFR_PSW             ; 0xD0  save PSW
+        setb    PSW_RS0             ; 0xD3  select register bank 1 (axis ISR bank)
         mov     R2,A                ; preserve accumulator across the ISR
         mov     A,R0                ; load current axis base pointer
         add     A,#0x10             ; derive feedback/workspace address
-        mov     R1,A                ; R1 = 0x58+axis: feedback/workspace slot
+        mov     R1,A                ; R1 = FB_BASE+axis (0x58+N): feedback/workspace slot
 
-        jb      0x22.7,ext1_feedback ; mask bit7 = ADC-result-read phase (not an axis)
-        jnb     0x22.6,ext1_control  ; mask bit6? no -> axis servo (bits0..5); yes -> timer phase
-        mov     C,0x23.4             ; (bit6 phase) transfer timer phase from Timer 0 ISR
-        mov     0x23.3,C             ; publish phase to the axis state machine
-        clr     0x23.4              ; consume the timer phase hand-off
+        jb      AXIS_MASK_B7,ext1_feedback ; 0x22.7  ADC-result-read phase (not an axis)
+        jnb     AXIS_MASK_B6,ext1_control  ; 0x22.6  no -> axis servo (bits0..5); yes -> timer phase
+        mov     C,TMR_PHASE_B4       ; 0x23.4  (bit6 phase) transfer timer phase from Timer 0 ISR
+        mov     TMR_PHASE_B3,C       ; 0x23.3  publish phase to the axis state machine
+        clr     TMR_PHASE_B4        ; 0x23.4  consume the timer phase hand-off
 
 ; Feedback branch: read the completed ADC conversion for the selected axis and
 ; store it in that axis's feedback slot before advancing the round-robin state.
 ext1_feedback:
-        mov     0x83,#0x59           ; select ADC feedback device
+        mov     SFR_DPH,#DEV_ADC_DATA ; 0x83=0x59  select ADC converted-data device
         movx    A,@DPTR              ; read completed conversion
-        mov     @R1,A                ; store feedback for this axis
+        mov     @R1,A                ; store feedback for this axis (FB_BASE+N)
         ajmp    ext1_advance         ; finish this pass and select next axis
 
 ; Control branch: derive the axis error/profile values and calculate a bounded
 ; motor command from the selected axis's feedback and target data.
 ext1_control:
-        mov     0x83,#0x58           ; select ADC channel/control device
+        mov     SFR_DPH,#DEV_ADC_START ; 0x83=0x58  select ADC channel/control device
         rl      A                    ; derive table index from axis state
         add     A,R1                 ; add axis workspace offset
         add     A,#0xDE              ; point into inline profile table
@@ -273,20 +275,20 @@ ext1_control:
         movc    A,@A+PC              ; lookup output/control parameter
         xch     A,R4                ; exchange table value and second index
         movc    A,@A+PC              ; lookup complementary parameter
-        mov     0xF0,A              ; save table value in B
+        mov     SFR_B,A             ; 0xF0  save table value in B
         movx    A,@DPTR              ; read current feedback/control value
         mov     R5,A                ; preserve first sampled value
-        inc     0x83                ; select adjacent ADC/control address
+        inc     SFR_DPH             ; 0x83  select adjacent ADC/control address (->0x59)
         movx    A,@DPTR             ; read second sampled value
         subb    A,R4                 ; compare feedback against target/table value
         jc      ext1_error_low       ; branch to low-side error handling
         mov     @R1,A               ; store the sampled difference
         mov     A,R5                ; restore first sampled value
-        mov     R5,0xF0             ; move profile value into R5
+        mov     R5,SFR_B            ; 0xF0  move profile value into R5
         mul     AB                  ; multiply sampled value by profile value
-        mov     R4,0xF0             ; preserve high product byte
+        mov     R4,SFR_B            ; 0xF0  preserve high product byte
         mov     A,@R1               ; reload stored difference
-        mov     0xF0,R5             ; move second factor into B
+        mov     SFR_B,R5            ; 0xF0  move second factor into B
         mul     AB                  ; multiply difference by second factor
         add     A,R4                ; combine product components
         rl      A                   ; scale computed output
@@ -294,7 +296,7 @@ ext1_control:
         anl     A,#0x03              ; clamp/quantize output magnitude
         rr      A                   ; restore scaled value alignment
         mov     R4,A                ; retain scaled magnitude
-        mov     A,0xF0              ; load high product byte
+        mov     A,SFR_B             ; 0xF0  load high product byte
         addc    A,#0x00             ; propagate carry into high byte
         rlc     A                   ; test for upper-range saturation
         jc      ext1_limit_high     ; clamp positive overflow
@@ -302,7 +304,7 @@ ext1_control:
         orl     A,R4                ; merge magnitude and direction bits
         jc      ext1_limit_high     ; clamp encoded overflow
         mov     @R1,A               ; store calculated axis value
-        anl     0x09,#0x57          ; retain relevant axis-state bits
+        anl     0x09,#0x57          ; 0x09 = bank-1 R1 (direct); retain relevant axis-state bits
         subb    A,@R1               ; compare calculated and stored values
         jnz     ext1_update_state   ; update state when value changed
         mov     R4,#0x00            ; zero adjustment for equal values
@@ -362,13 +364,13 @@ ext1_output_state:
 ; Active-axis update: merge the profile's axis mask into the active-axis flags
 ; while preserving the rotating current-axis mask.
 ext1_set_axis:
-        xch     A,0x22               ; exchange profile mask with current axis mask
-        orl     0x21,A               ; mark selected axis active
-        xch     A,0x22               ; restore current axis mask
+        xch     A,AXIS_MASK          ; 0x22  exchange profile mask with current axis mask
+        orl     AXIS_ACTIVE,A        ; 0x21  mark selected axis active
+        xch     A,AXIS_MASK          ; 0x22  restore current axis mask
 
 ; Output gate: skip motor-state work unless the axis subsystem is enabled.
 ext1_output:
-        jb      0x20.0,ext1_motion   ; axis subsystem enabled?
+        jb      SYS_AXIS_ENABLE,ext1_motion ; 0x20.0  axis subsystem enabled?
         ajmp    ext1_advance         ; skip control when motion is disabled
 
 ; Motion-state update: combine the profile command with the selected axis's
@@ -440,20 +442,20 @@ ext1_write_output:
 ext1_write_state_value:
         mov     @R0,A                ; update per-axis state/current value
         mov     A,R0                 ; reload axis workspace base
-        jbc     0xE0.2,ext1_port_c  ; select Port C path for upper axes
-        mov     0x83,#0x50           ; axes 0..3 use 8255 Port A
-        mov     R1,#0x4E             ; select Port A shadow
+        jbc     0xE0.2,ext1_port_c  ; ACC.2 select Port C path for upper axes
+        mov     SFR_DPH,#DEV_8255_PA ; 0x83=0x50  axes 0..3 use 8255 Port A
+        mov     R1,#PORTA_SHADOW    ; 0x4E  select Port A shadow
         sjmp    ext1_apply_output    ; apply encoded output
 ; Upper-axis port path: prepare the Port C output selection and offset.
 ext1_port_c:
         mov     R4,#0x00             ; clear alternate output offset
         mov     A,R0                 ; reload axis workspace base
-        jnb     0xE0.2,ext1_port_a  ; retain Port A path if selector is clear
-        clr     0xE0.2               ; clear selector before Port C output
+        jnb     0xE0.2,ext1_port_a  ; ACC.2 retain Port A path if selector is clear
+        clr     0xE0.2               ; ACC.2 clear selector before Port C output
 ; Port C selection join: select the Port C device and its output shadow.
 ext1_port_a:
-        mov     0x83,#0x52           ; axes 4..5 use 8255 Port C
-        mov     R1,#0x4F             ; select Port C shadow
+        mov     SFR_DPH,#DEV_8255_PC ; 0x83=0x52  axes 4..5 use 8255 Port C
+        mov     R1,#PORTC_SHADOW    ; 0x4F  select Port C shadow
 ; Motor output commit: combine the table encodings with the selected Port A/C
 ; shadow, write the result to the 8255, and test the remaining move mask.
 ext1_apply_output:
@@ -467,25 +469,25 @@ ext1_apply_output:
         orl     A,@R1                ; merge encoded output with shadow
         mov     @R1,A                ; update Port A/C output shadow
         movx    @DPTR,A              ; write motor command to 8255 [HW][BYTE]
-        mov     A,0x22               ; load current axis mask
-        anl     A,0x2B               ; clear completed axes from need-move mask
+        mov     A,AXIS_MASK          ; 0x22  load current axis mask
+        anl     A,NEED_MOVE          ; 0x2B  clear completed axes from need-move mask
         jnz     ext1_advance         ; advance when another axis remains active
 
 ; Round-robin exit: rotate the axis mask, select the next ADC channel, restore
 ; the interrupted CPU context, and return from EXT1.
 ext1_advance:
-        mov     A,0x22               ; load current rotating axis mask
+        mov     A,AXIS_MASK          ; 0x22  load current rotating axis mask
         rl      A                    ; rotate mask to next axis
-        mov     0x22,A               ; save next-axis mask
+        mov     AXIS_MASK,A          ; 0x22  save next-axis mask
         mov     A,R0                 ; load current axis workspace base
         inc     A                    ; advance to next axis
         anl     A,#0x07              ; wrap axis selector
-        mov     0x83,#0x58           ; select ADC channel device
+        mov     SFR_DPH,#DEV_ADC_START ; 0x83=0x58  select ADC channel device
         movx    @DPTR,A              ; select next channel AND pulse START (=/WR) -> begins next conversion [HW][BYTE]
-        orl     A,#0x48              ; convert selector to 0x48+axis base
+        orl     A,#DEV_AUX_LATCH     ; 0x48  convert selector to 0x48+axis base
         mov     R0,A                 ; save next axis speed/state base
         mov     A,R2                 ; restore interrupted accumulator
-        pop     0xD0                  ; restore interrupted PSW
+        pop     SFR_PSW              ; 0xD0  restore interrupted PSW
         reti                          ; return from External Interrupt 1
 
 ;==============================================================================

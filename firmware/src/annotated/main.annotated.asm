@@ -94,6 +94,8 @@
 ;------------------------------------------------------------------------------
 ; Decoded directly from ROM bytes. disasm51 rendered these incorrectly.
 ;==============================================================================
+        .include "rob3.inc"         ; symbolic names for IRAM/flags/SFRs/devices
+
         org     0x0000
 reset_vector:
         ljmp    init_start          ; 0x0600  RESET -> initialization        [BYTE]
@@ -399,17 +401,17 @@ hdr_next:
 ;------------------------------------------------------------------------------
 ram_done:
         mov     0x08,#0x48          ; RAM 0x08 (bank1 R0) = 0x48 axis base ptr
-        mov     0x22,#0x01          ; 0x22 = axis rotation mask, start at axis 0 (bit0)
-        mov     0x83,#0x58          ; DPH = 0x58 -> ADC/feedback (Y6/Y7), channel A8=0 [HW]
+        mov     AXIS_MASK,#0x01     ; 0x22 = axis rotation mask, start at axis 0 (bit0)
+        mov     SFR_DPH,#DEV_ADC_START ; 0x83=0x58 -> ADC/feedback (Y6/Y7), channel A8=0 [HW]
         clr     A
         movx    @DPTR,A             ; feedback select = 0 (axis 0 / ADD-A low)
-        mov     0xA8,#0x84          ; IE = 0x84 -> EA=1, enable EX1 (axis servo int) [INFER exact mask]
-        jb      0x22.0,$            ; wait until axis-0 mask bit clears (one ISR pass) [SIM to confirm]
-        jnb     0x22.0,$            ; then wait until it is set again (sync)          [SIM to confirm]
-        clr     0xA8.7              ; disable interrupts (EA=0) during next setup
+        mov     SFR_IE,#0x84        ; 0xA8: IE = 0x84 -> EA=1, enable EX1 (axis servo int) [INFER exact mask]
+        jb      AXIS_MASK_B0,$      ; 0x22.0 wait until axis-0 mask bit clears (one ISR pass) [SIM]
+        jnb     AXIS_MASK_B0,$      ; 0x22.0 then wait until it is set again (sync)          [SIM]
+        clr     IE_EA               ; 0xA8.7 disable interrupts (EA=0) during next setup
         mov     R7,#0x06            ; 6 axes
-        mov     R0,#0x58            ; src = feedback values (0x58..0x5D)
-        mov     R1,#0x50            ; dst = current positions (0x50..0x55)
+        mov     R0,#FB_BASE         ; 0x58 src = feedback values (0x58..0x5D)
+        mov     R1,#CURPOS_BASE     ; 0x50 dst = current positions (0x50..0x55)
 
 ;------------------------------------------------------------------------------
 ; (10) Copy 6 feedback readings -> current-position array (seed positions from
@@ -426,7 +428,7 @@ copy_fb_loop:
 ; (11) Preset the 6 axis speed/step entries (0x48..0x4D) to 0x01.          [BYTE]
 ;------------------------------------------------------------------------------
         mov     R7,#0x06            ; 6 axes
-        mov     R0,#0x48            ; -> axis speed array 0x48..0x4D
+        mov     R0,#SPEED_BASE      ; 0x48 -> axis speed array 0x48..0x4D
         mov     A,#0x01             ; default speed = 1
 speed_loop:
         mov     @R0,A               ; speed[R0] = 1
@@ -439,20 +441,20 @@ speed_loop:
 ;      SCON=0x50 (mode 1, 8-bit UART, REN=1). The baud-measure block below
 ;      clears Timer 0 (TL0/TH0); the Timer 1 reload (TH1) is derived later.  [BYTE]
 ;------------------------------------------------------------------------------
-        mov     0x89,#0x21          ; TMOD = 0x21 -> T1 mode2 (baud gen), T0 mode1
-        mov     0x88,#0x00          ; TCON = 0 (timers/int flags cleared)
-        mov     0x98,#0x50          ; SCON = 0x50 -> UART mode 1, REN enabled
-        jb      0xB0.0,baud_detect  ; if P3.0 == 1 -> auto-detect baud path
-        mov     0xA8,#0x07          ; IE = 0x07 -> EX0+ET0+EX1 (fixed/fast path; ES not set here)
-        setb    0x20.2              ; flag 0x20.2 = "baud ready"
+        mov     0x89,#0x21          ; TMOD (0x89) = 0x21 -> T1 mode2 (baud gen), T0 mode1
+        mov     SFR_TCON,#0x00      ; 0x88: TCON = 0 (timers/int flags cleared)
+        mov     SFR_SCON,#0x50      ; 0x98: SCON = 0x50 -> UART mode 1, REN enabled
+        jb      0xB0.0,baud_detect  ; P3.0 (0xB0.0) == 1 -> auto-detect baud path
+        mov     SFR_IE,#0x07        ; 0xA8: IE = 0x07 -> EX0+ET0+EX1 (fixed/fast path; ES not set)
+        setb    SYS_BAUD_DET        ; 0x20.2 flag = "baud ready"
         ajmp    init_finish         ; skip auto-detect, go finish init
 ;   NOTE: the fixed-baud path above enables EX0+ET0+EX1 but NOT the serial
 ;   interrupt (ES). The auto-detect path instead ends with MOV IE,#0x17 at
 ;   0x0739, which DOES set ES (serial) -> RS232 is interrupt-driven there.  [BYTE]
 
 baud_detect:
-        jb      0xB0.2,$+5          ; sample P3.2 [INFER: line-idle check]
-        setb    0x20.2              ; flag 0x20.2 = "baud ready"
+        jb      0xB0.2,$+5          ; sample P3.2 (0xB0.2) [INFER: line-idle check]
+        setb    SYS_BAUD_DET        ; 0x20.2 flag = "baud ready"
 ;------------------------------------------------------------------------------
 ; (12b) Baud-rate auto-detection: measure the width of an incoming serial
 ;       edge on P3.0 using TIMER 0 (TL0/TH0 cleared, SETB TR0 below), then
