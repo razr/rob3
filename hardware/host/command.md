@@ -261,6 +261,35 @@ mode, etc. Each returns a program-operation **status byte** (`0xF6` / `0xF2` /
 > upload bytes into the program store and trigger execution over RS-232, but the
 > on-wire encoding of each instruction is not yet documented here.
 
+### Program memory map & size  [BYTE][SIM]
+Programs live in the external **HM6264 8 KB SRAM** (`hardware/board/sram.md`),
+selected by the SRAM window (A15=1). Init probes it (complement write/readback
+at `0x063C`) and records the page base in IRAM `0x3E` (verified **`0x80`** →
+`0x8000`) and the body page in `0x3F` (**`0x81`** → `0x8100`).
+
+| SRAM region | Use |
+|:------------|:----|
+| `0x8000`–`0x80FF` (page `0x80`) | **label table** — `0x0A33` resolves `MARK m` by `rl A` (×2) then reading a 2-byte PC from this page, so up to ~128 labels (matches the manual's `MARK m, m=0..118`) |
+| `0x80EE`–`0x80FF` (top of page `0x80`) | program **header / byte-count** (read at `0x80FE`) and the end-marker structure written by `0x0880` |
+| `0x8100`–`0x9FFF` (pages `0x81`..`0x9F`) | program **body** (instruction bytes); the PC is the 16-bit `0x66:0x67` |
+
+So the program **body** spans roughly `0x8100`–`0x9FFF` ≈ **7.9 KB** of the 8 KB
+SRAM, minus the label table + header at the bottom/top of page `0x80`. The store
+is **battery-backed / nonvolatile** (Teachbox README: retained ~10 years). Note:
+the newer **ROB3i** manual quotes "512 steps/axis" and up to 118 labels — model
+figures; our ROB3 ROM uses the 8-bit position range and the page layout above.
+
+### Interpreter / executor locations  [BYTE]
+| Address | Role |
+|:--------|:-----|
+| `0x07FF` / `0x0803` | program **validator / setup** — walks the stored program, writes the end-marker (`0x0880`), maintains `0x28.1` (loaded) |
+| `0x0802` | program **step / execute one block** (called by the RUN/STEP system commands and the main loop) |
+| `0x0A33` | **label → PC resolver** (`GOTO m` / `RUN m`): 2-byte label table at page `0x3E`, result into `0x66:0x67` |
+| `0x08FF` | **motion executor** — called every main-loop pass (`0x0797`) to advance axis motion |
+
+The stored-program instruction encoding decoded by these routines is **[INFER]**
+(the reverse-engineering of the per-instruction byte format is future work).
+
 ---
 
 ## ROM confirmation [SIM]
