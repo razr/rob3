@@ -29,37 +29,28 @@ The very first byte sent from the control unit to the robot must be:
 0x20 (SPACE)
 ```
 
-As a response indicating a successful communication startup, the robot sends one of the following bytes back to the control unit, depending on the initialization state:
+As a response indicating a successful communication startup, the robot sends a
+byte back to the control unit. The table below gives the **ROM-verified [SIM]**
+meanings; the original manual grouped `0xF1`/`0xF2`/`0xF3` together as "multiple
+initialization", which is inaccurate against this firmware (see notes).
 
-| Response | Meaning |
-|----------|---------|
-| `0x15` | Initialization successful |
-| `0xF1` | Multiple initialization of the robot |
-| `0xF2` | Multiple initialization of the robot |
-| `0xF3` | Multiple initialization of the robot |
+| Response | Meaning (ROM-verified) | When / producer |
+|----------|------------------------|-----------------|
+| `0x15` | **Initialization successful** | emitted once when auto-baud locks — `0x0733` `mov SBUF,#0x15` (after `mov TH1,A` / `setb TR1`). **[SIM] on the wire.** |
+| `0xF1` | **Already initialized** (a byte arrived after the UART was already up) | serial idle-timeout — `0x0793` `mov R4,#0xF1`, when a byte was seen (`0x24.2`) and counter `0x18` expires. **[SIM] on the wire** (`15 F1`). |
+| `0xF3` | **Command-received ACK** (also the reply if `0x20` is sent as a command frame post-init) | dispatch default — `0x03AC` `mov R4,#0xF3`. Verified [SIM] as the class-0 ACK; plausible "already-initialised" reply but not observed on the wire in the handshake. |
+| `0xF2` | **Not a startup reply** — it is a *program single-step* command status | `0x0437` `mov R4,#0xF2`, reachable only via the `hdr.7=1` sub-command chain, **not** from a `0x20` byte. |
 
-Any other response from the robot indicates a communication error.
+> The manual originally listed:
+> `0x15` = "Initialization successful"; `0xF1` = `0xF2` = `0xF3` = "Multiple
+> initialization of the robot". The `0xF1`/`0xF3` bytes are indeed the
+> already-initialized/ACK replies, but **`0xF2` is a command status byte, not a
+> startup reply.** See "Status / acknowledgment bytes" below for the full `0xFx`
+> family — none of them are error codes.
 
-> **ROM verification of the startup replies [SIM]** (see
-> `firmware/src/annotated/rs232_serial.annotated.asm`,
-> `simulator/tests/sim_serial_e2e.sh`):
-> - **`0x15` — init successful — CONFIRMED, on the wire.** Emitted exactly once
->   when software auto-baud locks, by a direct blocking write at `0x0733`
->   (`mov SBUF,#0x15`), immediately after `mov TH1,A` / `setb TR1`.
-> - **`0xF1` — multiple init — CONFIRMED, on the wire.** Staged by the main-loop
->   serial idle-timeout at `0x0793` (`mov R4,#0xF1`) when a byte has been
->   received (`0x24.2`) and the timeout counter `0x18` expires — i.e. sending
->   `0x20` again while the UART is already up. End-to-end capture: `15 F1`.
-> - **`0xF3` — PARTIAL.** `0xF3` is the *default* command-status byte set at the
->   top of every dispatch (`0x03AC`); receiving `0x20` as a command frame yields
->   `R4=0xF3` [SIM], so it is plausibly the "already initialised" reply, but it
->   was not observed on the wire in the reset handshake here.
-> - **`0xF2` — NOT confirmed as a startup reply.** In the ROM `0xF2` (`0x0437`)
->   is a *system-command* status reached only via the `hdr.7=1` sub-command chain
->   — not reachable from a `0x20` byte. The manual's grouping of `0xF2` with the
->   startup replies looks inaccurate against this firmware. (Other status bytes:
->   `0xF6` at `0x03F1`, `0xF7` at `0x0776`, `0xF4` = `0xF3+1` in the system
->   branch — all command-status, not startup.)
+"Any other response from the robot indicates a communication error" means a byte
+**outside** the defined `0xFx`/`0x15`/data set (e.g. line noise) — the `0xFx`
+values themselves are acknowledgments, not errors.
 
 After the single `SPACE` initialization byte, the actual command data records can be transmitted.
 
