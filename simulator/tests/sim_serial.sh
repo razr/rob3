@@ -158,6 +158,15 @@ else
   die "alias 0x65 routing" "$AL"
 fi
 
+# --- 8) status/ACK family: 0xFx are acknowledgments, not errors --------------
+r4of() { # header -> staged status byte R4 (hex, no 0x)
+  printf 'reset\nset mem iram 0x28 0\nset mem iram 0x06 0x%s\nset mem sfr 0xe0 0x03\npc 0x03a9\nbreak 0x0525\nstep 250\ninfo registers\nquit\n' "$1" \
+    | run_sim | grep -A1 'R0 R1' | tail -1 | awk '{print $5}'
+}
+[[ "$(r4of 00)" == "f3" ]] && pass "status: class-0 cmd 0x00 -> ACK 0xF3 (not an error)" || die "expected F3 for 0x00 (got $(r4of 00))"
+[[ "$(r4of 80)" == "f4" ]] && pass "status: system cmd 0x80 -> ACK 0xF4 (0xF3+1)"          || die "expected F4 for 0x80 (got $(r4of 80))"
+[[ "$(r4of 82)" == "f6" ]] && pass "status: program-op cmd 0x82 -> status 0xF6"            || die "expected F6 for 0x82 (got $(r4of 82))"
+
 if [[ $fail -eq 0 ]]; then
   echo "sim_serial: OK"
 else

@@ -295,3 +295,28 @@ A frame is only acted on if its last byte is ETX `0x03` (`cjne A,#0x03` at
 > "no other hidden commands" claim is bounded by this single-frame dispatch
 > sweep — the program-interpreter (`0x81` block / `0x89..0x8F` download) and the
 > system class (`hdr.7=1`) were exercised only in their empty/no-program state.
+
+## Status / acknowledgment bytes — the `0xFx` family is NOT errors  [SIM]
+
+The robot tags every command reply with a **status byte in the `0xF0` range**;
+these are normal acknowledgments, not error codes. The manual's note that "any
+*other* response indicates a communication error" means a byte *outside* this
+defined set — there is **no distinct NAK/error byte** in the firmware (even a
+malformed, non-ETX frame is answered with the normal `0xF3`).
+
+| Status | Meaning | Producer (ROM) |
+|:-------|:--------|:---------------|
+| `0x15` | initialization OK | `0x0733` `mov SBUF,#0x15` (auto-baud lock) |
+| `0xF1` | multiple init (byte received while already up) | `0x0793` `mov R4,#0xF1` (idle-timeout) |
+| `0xF3` | **default ACK** — "command received" | `0x03AC` `mov R4,#0xF3` (every class-0 cmd `0x00..0x7F`; also the malformed-frame fallback) |
+| `0xF4` | system-class ACK (`0xF3`+1) | `0x03B8` `inc R4` (system cmds `0x80+`) |
+| `0xF6` | program-operation status | `0x03F1` `mov R4,#0xF6` |
+| `0xF2` | program single-step status | `0x0437` `mov R4,#0xF2` |
+| `0xF7` | **motion-complete ACK** (target reached, motors cut) | `0x0776` `mov R4,#0xF7` (main loop, ack-bit reply) |
+
+For **query** commands (`0x40..0x45`, `0x4F`, `0x63`) the reply is the requested
+DATA (streamed via the buffer TX path), not a status byte — `R4` is still staged
+as `0xF3` but is not what gets sent. All status/data responses are ETX-framed.
+Verified by staging `rx_dispatch` per command family and reading `R4`
+(`simulator/tests/sim_serial.sh`); the `0x15`/`0xF1` wire emission is confirmed
+in `simulator/tests/sim_serial_e2e.sh`.
