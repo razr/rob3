@@ -145,6 +145,24 @@ Verified truths: reset is `LJMP 0x0600` (not "jump_05FF"); the keypad scanner is
 entered at **0x0C00** (0x0BFF is padding); the key handler at **0x0C80**
 (0x0C7F is padding). Confirm entry addresses from the ROM bytes, not the labels.
 
+### Serial dispatch `rx_dispatch` (0x03A9) expects A=ETX, header in R6
+To seed a command into the RS-232 dispatch you must set **A = 0x03 (ETX)** and
+put the **header byte in R6** (IRAM 0x06), not the header in A. The
+`cjne A,#0x03` at 0x03AE is a **frame-terminator check** (the last received byte
+must be ETX); it then reloads the header from R6 (`mov A,R6`). Entering with the
+header in A sends it straight to the generic-ack path and no command runs. The
+class-0 handlers can also be entered directly at `cmd_class0` (0x0440) with
+A=header for isolated dispatch tests (that path re-reads A). Program instructions
+reuse this same decode in `prog_exec` (0x0941), so a stored opcode is the same
+byte layout as a serial command byte.
+
+### RS-232 command classes: bit7=0 is axis/position, bit7=1 is system/program
+Easy to invert: **bit7=0** headers are the axis/position/query/control class
+(`0x00–0x7F`); **bit7=1** (`0x80+`) are the system/program-control class. Within
+class-0, bit6/5/4 pick the op and the low 3 bits are the axis (7=all); bit3 is
+the acknowledge-request `R` bit (→ 0x23.1). All `0xFx` replies are ACK/status
+bytes, not errors. Verified in `hardware/host/command.md`.
+
 ## Provenance tagging (always)
 
 Tag every firmware claim with how it was established, and keep unproven claims

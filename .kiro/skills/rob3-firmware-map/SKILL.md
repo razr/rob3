@@ -97,7 +97,7 @@ Register banks: 0 = main (`0x00`), 1 = ISRs INT0/INT1 (`0x08`), 2 = serial ISR
 | `0x50/0x51/0x52/0x53` | 8255 Port A / Port B / Port C / Control |
 | `0x58` | ADC channel-select/START (A8 = ADD-A channel) |
 | `0x59` | ADC converted-data read |
-| `≥0xA0` (A15) | external SRAM (program storage) |
+| `≥0x80` (A15) | external SRAM (program storage); init probes it, base recorded in `0x3E` (=`0x80`), body page `0x3F` (=`0x81`) |
 
 Details and the decode logic are in `rob3-hardware`. Feedback is **analog via
 ADC0808/0809**, EOC → INT1 — *not* a quadrature encoder. [HW]
@@ -112,11 +112,27 @@ ADC0808/0809**, EOC → INT1 — *not* a quadrature encoder. [HW]
    regs) — see `rob3-firmware-sim` for why a single-pass sim of it is not
    faithful. [BYTE]/[SIM]
 2. **RS232 binary protocol** (UART ISR `0x0300`, TX helper `0x0541`) — Mode-1
-   8-bit UART, `SCON=0x50`; baud auto-detect or fixed via P3.0. Host command
-   bytes have bit7=1; bit6 = axis/position vs system/program class; low bits =
-   axis 0-5 or `0x07`=all. `0x81` = data-block marker; `0x89–0x8F` = program
-   download; responses framed with `0x03` (ETX). Command decode is partly
-   [INFER].
+   8-bit UART, `SCON=0x50`. **Serial works ONLY on the auto-baud path** (P3.0=1
+   at 0x06A7 → measures the training byte on the raw P3.0 pin, derives TH1,
+   starts TR1, `IE=0x17` with ES); the **fixed-baud strap (P3.0=0) sets IE=0x07
+   (no ES) and never starts Timer 1 — no serial**. Auto-baud accepts a narrow
+   bit-time window (≈≤38400 at 11.0592 MHz; 115200 out of range) and derives
+   **TH1=0xFC**. [BYTE][SIM]
+   Command byte bit fields (dispatch `rx_dispatch` 0x03A9; **verified [SIM]**):
+   **bit7=0 = axis/position class**, bit7=1 = system/program class; within
+   class-0, bit6/bit5/bit4 pick the op and the low 3 bits = axis 0–5 or `7`=all;
+   **bit3 = R (ack request) → 0x23.1**. Confirmed commands (see
+   `hardware/host/command.md`): `0x40–0x45/0x4F` position query, `0x00–0x07/0x0F`
+   set position, `0x70–0x77/0x7F` position+speed (arms motion mask 0x2B),
+   `0x60/0x61/0x62` motor disable/enable/shutdown, `0x63` serial number,
+   **hidden `0x50–0x57` = digital-input read** (0x5E/0x5F/P1). Frames end with
+   **ETX `0x03`** (enforced: `cjne A,#0x03` at 0x03AE). Reset handshake: host
+   sends `0x20` → `0x15` (init-OK, at auto-baud lock 0x0733) or `0xF1`
+   (already-init, idle-timeout 0x0793). **All `0xFx` replies are ACK/status
+   bytes, NOT errors** (0xF3 default ACK, 0xF4 system ACK, 0xF6/0xF2 program
+   status, 0xF7 motion-complete); there is no distinct NAK byte. `0x81` =
+   program-upload block marker (streams to SRAM). See
+   `firmware/src/annotated/rs232_serial.annotated.asm`.
 3. **Teach-pendant editor** (scanner `0x0C00`, handler `0x0C80`) — scans the 5×5
    matrix (strobe via 8255, read columns on **P1/0x90**), debounces, returns a
    key index; the handler does axis jog, program edit, run/stop, position teach,
@@ -130,12 +146,23 @@ ADC0808/0809**, EOC → INT1 — *not* a quadrature encoder. [HW]
    (loopback module) — see `rob3-firmware-sim`. POS-digit value entry
    (`pos_digit` 0x0D65 / `pos_commit` 0x0D9F) is `[BYTE]` but not yet mapped as a
    black-box key sequence.
-4. **Program interpreter** (`0x0941`) — executes stored motion programs from
-   external SRAM: 8-byte instructions (opcode, 6 axis targets, speed/flags),
-   PC in `0x66:0x67`, end marker `0x83`. Instruction set only partly decoded
-   [INFER].
+4. **Program interpreter** — executes stored motion programs from external
+   SRAM. Entry points [BYTE][SIM]: `prog_prepare` **0x0803** (label-table
+   preprocessor: records each `MARK` opcode `0x1F` as a 2-byte PC in the
+   page-0x80 table; validates header/end sentinel `0x83`), `prog_exec`
+   **0x0941** (executor: fetches opcode into `0x27`, decodes with the SAME
+   command bit fields as the RS232 dispatch, most instructions occupy an
+   **8-byte slot**, PC in `0x66:0x67`), `prog_goto` **0x0A33** (label→PC:
+   `rl A`×2 into the page-0x80 table). Opcode `0x1F`=MARK, `0x36`=3-byte instr,
+   bit7=END. SRAM layout: page **0x80** = label table (~128 labels) + header/
+   end-marker at 0x80EE.., pages **0x81..0x9F** = program body (~7.9 KB of the
+   8 KB HM6264, nonvolatile). Stored programs reuse the serial command encoding
+   and are the SAME programs the Teachbox creates. Per-opcode operand layout is
+   partly [INFER]. See `firmware/src/annotated/program_interpreter.annotated.asm`
+   and the `demo-hello-program` test.
 5. **Motion executor** (`0x08FF`, called from the main loop) — high-level:
-   detects all-axes-done / timeout / I/O conditions, drives program stepping.
+   detects all-axes-done / timeout / I/O conditions, drives program stepping
+   (fetches the next `prog_exec` instruction when the current step completes).
 
 ## Axis / joint reference [HW]
 

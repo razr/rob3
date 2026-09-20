@@ -70,7 +70,9 @@ transcribed**.
 | `make sim-serial` | Behavioral: RS-232 protocol dispatch/framing (read/write/ETX/reset-ACK) by seeded entry; runs on stock `s51`. |
 | `make sim-serial-autobaud` | Behavioral: software auto-baud brings the UART up via the `rxd` `cl_hw` pin driver (opt-in; needs loader `ucsim_51` + adc/rxd). |
 | `make sim-serial-e2e` | Behavioral: **full RX chain** — auto-baud lock → real byte over `-S` link → SBUF/RI → RX ISR, with the adc servo ISR concurrent (opt-in). |
+| `make sim-program` | Behavioral: stored-program interpreter — fetch/decode/8-byte-advance, store-position, END, GOTO-label resolve (stock `s51`). |
 | `make sim-teachbox-axis` | **Black-box** keypad axis-select → POSITION mode via the real scanner+handler (opt-in; needs teachbox **and** loopback modules). |
+| `make demo-hello-program` | Demo: hand-assemble a "hello world" program, load into SRAM, run it (move axes, END); AUTO self-run via the main loop with the loader build. |
 | `make test` | `verify` + all `sim-*`. |
 | `make gen` | Regenerate the byte-exact `.a51` sources from the ROM (via `gen_init.py`). |
 | `make clean` | Remove `build/`. |
