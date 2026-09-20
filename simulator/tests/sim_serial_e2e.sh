@@ -64,6 +64,7 @@ dump sfr 0x98 0x99
 clear
 step 3000
 dump iram 0x24 0x24
+step 1400000
 quit
 EOF
 LOG="$(printf '%s\n' "$S" | timeout 45 "$UCSIM_51" $SIMFLAGS -S "in=$IN,out=$OUT" "$SAFEHEX" 2>&1 | sed 's/\x1b\[0K//g')"
@@ -78,10 +79,18 @@ if grep -qi 'stop at 0x00073c' <<<"$LOG"; then
 else
   die "auto-baud did not lock"
 fi
-if [ -s "$OUT" ] && xxd "$OUT" | head -1 | grep -qiE '\b15\b'; then
+if [ -s "$OUT" ] && xxd "$OUT" | head -1 | grep -qiE ':\s*15'; then
   pass "auto-baud ACK 0x15 transmitted on serial OUTPUT (TX over the link)"
 else
   die "expected 0x15 on the serial output"
+fi
+# startup reply sequence: 0x15 (init OK) then 0xF1 (multiple-init idle-timeout
+# reply, since a byte was received after the UART came up). Confirms WHEN each
+# startup byte is emitted (see hardware/host/command.md).
+if xxd "$OUT" | head -1 | grep -qiE '15\s*f1'; then
+  pass "startup reply sequence 15 F1 on the wire (0x15 init-OK, then 0xF1 multiple-init)"
+else
+  die "expected startup reply sequence 15 F1 on the wire"
 fi
 
 # 2) command byte reached SBUF verbatim + RI set

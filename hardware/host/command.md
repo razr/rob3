@@ -40,6 +40,27 @@ As a response indicating a successful communication startup, the robot sends one
 
 Any other response from the robot indicates a communication error.
 
+> **ROM verification of the startup replies [SIM]** (see
+> `firmware/src/annotated/rs232_serial.annotated.asm`,
+> `simulator/tests/sim_serial_e2e.sh`):
+> - **`0x15` — init successful — CONFIRMED, on the wire.** Emitted exactly once
+>   when software auto-baud locks, by a direct blocking write at `0x0733`
+>   (`mov SBUF,#0x15`), immediately after `mov TH1,A` / `setb TR1`.
+> - **`0xF1` — multiple init — CONFIRMED, on the wire.** Staged by the main-loop
+>   serial idle-timeout at `0x0793` (`mov R4,#0xF1`) when a byte has been
+>   received (`0x24.2`) and the timeout counter `0x18` expires — i.e. sending
+>   `0x20` again while the UART is already up. End-to-end capture: `15 F1`.
+> - **`0xF3` — PARTIAL.** `0xF3` is the *default* command-status byte set at the
+>   top of every dispatch (`0x03AC`); receiving `0x20` as a command frame yields
+>   `R4=0xF3` [SIM], so it is plausibly the "already initialised" reply, but it
+>   was not observed on the wire in the reset handshake here.
+> - **`0xF2` — NOT confirmed as a startup reply.** In the ROM `0xF2` (`0x0437`)
+>   is a *system-command* status reached only via the `hdr.7=1` sub-command chain
+>   — not reachable from a `0x20` byte. The manual's grouping of `0xF2` with the
+>   startup replies looks inaccurate against this firmware. (Other status bytes:
+>   `0xF6` at `0x03F1`, `0xF7` at `0x0776`, `0xF4` = `0xF3+1` in the system
+>   branch — all command-status, not startup.)
+
 After the single `SPACE` initialization byte, the actual command data records can be transmitted.
 
 Each command data record must always be terminated with:
