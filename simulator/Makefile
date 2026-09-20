@@ -49,7 +49,7 @@ SAFEHEX    := $(BUILD)/rob3.hex
 
 .PHONY: all verify verify-init verify-teachbox \
         sim-init sim-run sim-teachbox sim-teachbox-module sim-adc sim-serial \
-        sim-serial-autobaud sim-serial-e2e sim-program sim-teachbox-axis demo-teachbox test gen clean help
+        sim-serial-autobaud sim-serial-e2e sim-program sim-teachbox-axis demo-teachbox demo-hello-program test gen clean help
 
 all: verify ## Default: assemble all regions and prove they match the ROM
 
@@ -133,6 +133,10 @@ sim-teachbox-axis: $(SAFEHEX) ## Black-box: real keypad axis-select -> POSITION 
 demo-teachbox: $(SAFEHEX) ## Demo: teachbox key press -> axis-select -> jog -> axis position moves (needs custom ucsim_51)
 	@SAFEHEX=$(SAFEHEX) SIMFLAGS="$(SIMFLAGS)" \
 		$(SIMDIR)/tests/demo_teachbox_axis.sh
+
+demo-hello-program: $(SAFEHEX) ## Demo: hand-assemble a "hello world" program, load into SRAM, run it (move axes 0/1, END)
+	@SAFEHEX=$(SAFEHEX) SIM="$(SIM)" UCSIM_51="$(UCSIM_51)" SIMFLAGS="$(SIMFLAGS)" \
+		$(SIMDIR)/tests/demo_hello_program.sh
 
 # ---- Aggregate ---------------------------------------------------------------
 test: verify sim-init sim-run sim-serial sim-program sim-serial-autobaud sim-serial-e2e sim-teachbox sim-teachbox-module sim-adc sim-teachbox-axis ## Run all tests (golden + behavioral)
