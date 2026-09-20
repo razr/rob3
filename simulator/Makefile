@@ -49,7 +49,7 @@ SAFEHEX    := $(BUILD)/rob3.hex
 
 .PHONY: all verify verify-init verify-teachbox \
         sim-init sim-run sim-teachbox sim-teachbox-module sim-adc sim-serial \
-        sim-serial-autobaud sim-serial-e2e sim-teachbox-axis demo-teachbox test gen clean help
+        sim-serial-autobaud sim-serial-e2e sim-program sim-teachbox-axis demo-teachbox test gen clean help
 
 all: verify ## Default: assemble all regions and prove they match the ROM
 
@@ -103,6 +103,10 @@ sim-serial: $(SAFEHEX) ## Behavioral: RS-232 protocol dispatch/framing (read/wri
 	@SAFEHEX=$(SAFEHEX) SIM="$(SIM)" SIMFLAGS="$(SIMFLAGS)" \
 		$(SIMDIR)/tests/sim_serial.sh
 
+sim-program: $(SAFEHEX) ## Behavioral: stored-program interpreter (fetch/decode/advance, store-pos, end, GOTO label)
+	@SAFEHEX=$(SAFEHEX) SIM="$(SIM)" SIMFLAGS="$(SIMFLAGS)" \
+		$(SIMDIR)/tests/sim_program.sh
+
 sim-serial-autobaud: $(SAFEHEX) ## Behavioral: software auto-baud brings UART up via the rxd cl_hw pin driver (opt-in; skips w/o loader ucsim_51 + adc/rxd modules)
 	@SAFEHEX=$(SAFEHEX) UCSIM_51="$(UCSIM_51)" SIMFLAGS="$(SIMFLAGS)" \
 		$(SIMDIR)/tests/sim_serial_autobaud.sh
@@ -131,7 +135,7 @@ demo-teachbox: $(SAFEHEX) ## Demo: teachbox key press -> axis-select -> jog -> a
 		$(SIMDIR)/tests/demo_teachbox_axis.sh
 
 # ---- Aggregate ---------------------------------------------------------------
-test: verify sim-init sim-run sim-serial sim-serial-autobaud sim-serial-e2e sim-teachbox sim-teachbox-module sim-adc sim-teachbox-axis ## Run all tests (golden + behavioral)
+test: verify sim-init sim-run sim-serial sim-program sim-serial-autobaud sim-serial-e2e sim-teachbox sim-teachbox-module sim-adc sim-teachbox-axis ## Run all tests (golden + behavioral)
 	@echo "ALL TESTS PASSED"
 
 # ---- Regenerate the byte-exact sources from the ROM --------------------------

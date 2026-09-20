@@ -25,13 +25,19 @@
 | 0x0600-0x073C | Hardware init, baud rate detection |
 | 0x073C-0x074D | Final init, start main loop |
 | 0x074D        | **Main loop entry** |
-| 0x0802-0x0880 | External RAM program management |
-| 0x08FF-0x0940 | Motion execution / axis stepping |
-| 0x0941-0x0A0B | Program instruction interpreter |
+| 0x0802-0x0880 | External RAM program management (label-table preprocessor `prog_prepare`) |
+| 0x08FF-0x0940 | Motion execution / axis stepping (`motion_exec`) |
+| 0x0941-0x0A0B | Program instruction interpreter / executor (`prog_exec`) |
+| 0x0A33-0x0A41 | Label -> PC resolver (`prog_goto`, GOTO/RUN m) |
 | 0x0BFF-0x0C64 | Keyboard/teach pendant scanner |
 | 0x0C7F-0x0FDE | Teach pendant command handler / editor |
 
 > Vector targets verified from ROM bytes (see `firmware/src/annotated/main.annotated.asm`).
+> The program interpreter (0x0803 / 0x0941 / 0x0A33) is annotated in
+> `firmware/src/annotated/program_interpreter.annotated.asm` — stored programs
+> reuse the RS-232 command bit-field encoding; opcode 0x1F = MARK (label), 0x36 =
+> a 3-byte instruction; most instructions occupy an 8-byte slot. Verified in
+> `simulator/tests/sim_program.sh`.
 > The earlier "jump_05FF / jump_003F / jump_02FF / lcall jump_22FE" labels were
 > disasm51 artifacts (0xFF padding decoded as `MOV R7,A` shifted the boundaries);
 > the true reset target is `LJMP 0x0600` (bytes `02 06 00` at 0x0000).

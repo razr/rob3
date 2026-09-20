@@ -19,6 +19,7 @@ cd simulator
 make sim-init      # runs tests/sim_init.sh     (init sequence)
 make sim-run       # runs tests/sim_run.sh       (init past the ADC/INT1 gate)
 make sim-serial    # runs tests/sim_serial.sh    (RS-232 protocol dispatch/framing)
+make sim-program   # runs tests/sim_program.sh   (stored-program interpreter)
 make sim-serial-autobaud  # runs tests/sim_serial_autobaud.sh (software auto-baud via rxd cl_hw; opt-in)
 make sim-serial-e2e  # runs tests/sim_serial_e2e.sh (full RX chain: wire -> SBUF -> ISR; opt-in)
 make sim-teachbox  # runs tests/sim_teachbox.sh  (keypad scanner decode, P1 injection)
