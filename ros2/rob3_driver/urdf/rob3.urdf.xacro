@@ -1,0 +1,92 @@
+<?xml version="1.0"?>
+<!-- ROB3 6-axis robot description (kinematically approximate).
+     Joint limits come from the project README / hardware docs:
+       base   +80..-80 deg | shoulder +70..-30 | elbow 0..-100
+       wrist_pitch +/-100  | wrist_roll +/-100 | gripper 0..60 mm (prismatic)
+     Link lengths are placeholders — REPLACE with measured dimensions. This is
+     enough for robot_state_publisher / joint_states visualization; it is not a
+     calibrated kinematic model. -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="rob3">
+
+  <xacro:property name="deg" value="0.017453292519943295"/>
+
+  <material name="rob3_grey"><color rgba="0.6 0.6 0.62 1"/></material>
+  <material name="rob3_blue"><color rgba="0.15 0.35 0.7 1"/></material>
+
+  <xacro:macro name="cyl_link" params="name len radius material">
+    <link name="${name}">
+      <visual>
+        <origin xyz="0 0 ${len/2}" rpy="0 0 0"/>
+        <geometry><cylinder length="${len}" radius="${radius}"/></geometry>
+        <material name="${material}"/>
+      </visual>
+      <collision>
+        <origin xyz="0 0 ${len/2}" rpy="0 0 0"/>
+        <geometry><cylinder length="${len}" radius="${radius}"/></geometry>
+      </collision>
+      <inertial>
+        <mass value="0.2"/>
+        <inertia ixx="1e-3" ixy="0" ixz="0" iyy="1e-3" iyz="0" izz="1e-3"/>
+      </inertial>
+    </link>
+  </xacro:macro>
+
+  <link name="base_link">
+    <visual>
+      <geometry><box size="0.12 0.12 0.05"/></geometry>
+      <material name="rob3_grey"/>
+    </visual>
+  </link>
+
+  <xacro:cyl_link name="link1" len="0.10" radius="0.03" material="rob3_blue"/>
+  <xacro:cyl_link name="link2" len="0.12" radius="0.025" material="rob3_grey"/>
+  <xacro:cyl_link name="link3" len="0.10" radius="0.022" material="rob3_blue"/>
+  <xacro:cyl_link name="link4" len="0.06" radius="0.02"  material="rob3_grey"/>
+  <xacro:cyl_link name="link5" len="0.04" radius="0.018" material="rob3_blue"/>
+  <link name="gripper_link">
+    <visual><geometry><box size="0.03 0.05 0.03"/></geometry><material name="rob3_grey"/></visual>
+  </link>
+
+  <!-- axis 0: base rotation (q1) +80..-80 deg -->
+  <joint name="base" type="revolute">
+    <parent link="base_link"/><child link="link1"/>
+    <origin xyz="0 0 0.05" rpy="0 0 0"/><axis xyz="0 0 1"/>
+    <limit lower="${-80*deg}" upper="${80*deg}" effort="10" velocity="1.0"/>
+  </joint>
+
+  <!-- axis 1: shoulder (q2) +70..-30 deg -->
+  <joint name="shoulder" type="revolute">
+    <parent link="link1"/><child link="link2"/>
+    <origin xyz="0 0 0.10" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit lower="${-30*deg}" upper="${70*deg}" effort="10" velocity="1.0"/>
+  </joint>
+
+  <!-- axis 2: elbow (q3) 0..-100 deg -->
+  <joint name="elbow" type="revolute">
+    <parent link="link2"/><child link="link3"/>
+    <origin xyz="0 0 0.12" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit lower="${-100*deg}" upper="0" effort="8" velocity="1.0"/>
+  </joint>
+
+  <!-- axis 3: wrist pitch (q4) +/-100 deg -->
+  <joint name="wrist_pitch" type="revolute">
+    <parent link="link3"/><child link="link4"/>
+    <origin xyz="0 0 0.10" rpy="0 0 0"/><axis xyz="0 1 0"/>
+    <limit lower="${-100*deg}" upper="${100*deg}" effort="5" velocity="1.5"/>
+  </joint>
+
+  <!-- axis 4: wrist roll (q5) +/-100 deg -->
+  <joint name="wrist_roll" type="revolute">
+    <parent link="link4"/><child link="link5"/>
+    <origin xyz="0 0 0.06" rpy="0 0 0"/><axis xyz="0 0 1"/>
+    <limit lower="${-100*deg}" upper="${100*deg}" effort="5" velocity="1.5"/>
+  </joint>
+
+  <!-- axis 5: gripper 0..60 mm (prismatic) -->
+  <joint name="gripper" type="prismatic">
+    <parent link="link5"/><child link="gripper_link"/>
+    <origin xyz="0 0 0.04" rpy="0 0 0"/><axis xyz="1 0 0"/>
+    <limit lower="0.0" upper="0.060" effort="20" velocity="0.05"/>
+  </joint>
+
+</robot>

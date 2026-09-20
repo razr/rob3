@@ -1,0 +1,16 @@
+# ROB3 driver configuration.
+#
+# The driver node speaks the ROB3 low-level protocol directly (it is not a
+# ros2_control hardware component), so this file holds the node parameters
+# rather than a controller_manager config. Joint names match the URDF.
+
+rob3_driver:
+  ros__parameters:
+    # transport: 'tcp' (ucSim -S socket) or 'serial' (real /dev/ttyUSB0)
+    transport: tcp
+    host: 127.0.0.1
+    port: 54321
+    device: /dev/ttyUSB0
+    baud: 9600
+    publish_rate: 10.0     # /joint_states Hz
+    joint_prefix: ""       # e.g. "rob3_" if namespacing joints
