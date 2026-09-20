@@ -211,6 +211,58 @@ Command keyword, 7 bytes actual position values (0–255), ETX
 
 ---
 
+## Stored programs (same as the Teachbox) — upload & execute over RS-232
+
+The positioning/query commands above act on the robot **immediately**. ROB3 can
+also store a **control program** — a sequence of instructions (MARK / GOTO / IF /
+OUT / TIM / POS …) — in its **nonvolatile external SRAM** (battery-backed
+HM6264, page `0x80` = `0x8000`; base kept in IRAM `0x3E:0x3F`).
+
+**This is the *same* program store and instruction set the Teachbox uses.** The
+Teachbox README states the ROB3 "can be programmed directly via the Teachbox …
+these instructions are then stored in memory as a control program", and "the
+RS-232 serial interface [makes] it possible to control **and program** the robot
+from a PC." So a program entered by keypad and one uploaded over serial are the
+same bytes in the same memory. The full instruction/command set is documented in
+[`../teachbox/README.md`](../teachbox/README.md) ("Summary of all Instructions
+and Commands"): `MARK m`, `POS`, `TIM t`, `GOTO m [. n]`, `IF i [. m]`,
+`OUT k +/-`, `NOP`, program start/end/`DEL` separators, and the run-control
+commands `RUN [.] [m]`, `STOP [.] [m]`, `INS`, `DEL`, `CLR`.
+
+### Upload — the `0x81` block command  [SIM: transport]
+A `0x81` header puts the receiver into **block-store mode** (sets RX flag
+`0x24.3`, verified [SIM]). The following bytes give a run pointer/length, then
+the program bytes, which are streamed into external SRAM with `MOVX`
+(verified [SIM]: a byte written via this path lands at SRAM `0x8100`). The
+firmware maintains a program header (byte count) at the top of the SRAM page and
+sets **program-loaded** (`0x28.1`); a stored program persists across power-off
+(lithium-backed, ~10 years per the Teachbox manual).
+
+### Download / readback
+Reading the stored program back is the `0x25.6` TX "stream from SRAM" path
+(`sys_readprog`, `0x03C9`): it sends the header + program bytes framed with ETX.
+
+### Execution control — the system commands (header bit 7 = 1)
+Headers with **bit 7 set** (`0x80`+) are *system* commands. The firmware
+subtracts `0x80` and dispatches on the sub-code (`sys_cmd` chain at `0x03E1`),
+manipulating the program state byte `0x28`
+(`.1`=loaded, `.2`=running, `.3`=motion-active, `.4`=conditional) and calling the
+program interpreter (`0x07FF` / `0x0802` / `0x0A33`). These correspond to the
+Teachbox **RUN / STEP / STOP / DISPLAY** run-control commands: start execution
+from a label, single-step, stop (retaining or clearing state), set conditional
+mode, etc. Each returns a program-operation **status byte** (`0xF6` / `0xF2` /
+`0xF4`; see the status table below) — these are acknowledgments, not errors.
+
+> Provenance: the SRAM program store, the `0x81` block-store transport, the
+> program-loaded flag, and the system-command routing are **[SIM]** verified;
+> the shared-store claim is **[HW-doc]** (Teachbox README). The exact **program
+> instruction byte format** (what the interpreter at `0x0802`/`0x0A33` decodes
+> per stored byte) is **[INFER]** — not yet reverse-engineered. So you *can*
+> upload bytes into the program store and trigger execution over RS-232, but the
+> on-wire encoding of each instruction is not yet documented here.
+
+---
+
 ## ROM confirmation [SIM]
 
 Each command header was driven through the real 8031 dispatch (entry
