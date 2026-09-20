@@ -67,6 +67,9 @@
 
 ## PC connection
 
+See [host serial interface](host/README.md) for the RS-232 wire settings, the
+reset handshake (`0x20` → `0xF1` reply), and example host commands.
+
 ```ascii
                                                           DB9
                                                       ▓●●●●●●●●●▓

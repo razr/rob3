@@ -21,6 +21,7 @@ Verified against the ucSim **0.9.9** checkout used by this project
 | :---- | :---- | :----- |
 | [001](001-pipelined-command-discarded-on-resuser/) | Command pipelined after `run`/`step` is discarded unexecuted (resUSER input drain) | **confirmed bug + repro + patch** |
 | [002](002-segfault-on-at-in-filename/) | Segfault loading an input file whose name contains `@` | **submitted upstream ([#13](https://github.com/danieldrotos/ucsim/issues/13)) + closed** |
+| [003](003-mcs51-uart-does-not-drive-rxd-txd-pins/) | MCS-51 UART does not drive the RXD/TXD pins (blocks software auto-baud) | **limitation + repro; `rxd` cl_hw module supplies the missing pin** |
 
 ## Investigated but not filed as bugs
 

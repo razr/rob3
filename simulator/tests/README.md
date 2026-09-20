@@ -18,6 +18,9 @@ sets the environment):
 cd simulator
 make sim-init      # runs tests/sim_init.sh     (init sequence)
 make sim-run       # runs tests/sim_run.sh       (init past the ADC/INT1 gate)
+make sim-serial    # runs tests/sim_serial.sh    (RS-232 protocol dispatch/framing)
+make sim-serial-autobaud  # runs tests/sim_serial_autobaud.sh (software auto-baud via rxd cl_hw; opt-in)
+make sim-serial-e2e  # runs tests/sim_serial_e2e.sh (full RX chain: wire -> SBUF -> ISR; opt-in)
 make sim-teachbox  # runs tests/sim_teachbox.sh  (keypad scanner decode, P1 injection)
 make sim-teachbox-module  # runs tests/sim_teachbox_module.sh (compiled teachbox cl_hw; opt-in)
 make sim-adc       # runs tests/sim_adc.sh (compiled adc cl_hw: free-run past the ADC/INT1 gate; opt-in)
@@ -127,6 +130,72 @@ clear ; set mem sfr 0xb0 0x00
 break 0x074b ; run
 dump iram 0x48 0x55 ; dump sfr 0xa8 0xa8
 ```
+
+## `sim_serial.sh` — RS-232 command protocol semantics
+
+**Premise.** Prove the RS-232 UART command dispatch and response framing
+annotated in `../firmware/src/annotated/rs232_serial.annotated.asm`, by running
+the real ROM and observing IRAM/registers.
+
+**ucSim serial quirk (why we don't inject via SBUF).** In this build's serial
+model (`ucsim/src/sims/s51.src/serial.cc`), `MOV A,SBUF` returns the model's
+internal `s_in` and a write to SBUF sets `s_out` — **neither is the SBUF SFR
+cell**. So `set mem sfr 0x99` does not feed the RX path and `dump sfr 0x99` does
+not show transmitted bytes. Instead each case enters the command path **after**
+the SBUF read (seeding `A` / the RX buffer / feedback slots) and asserts the
+resulting state. This isolates the dispatch + framing, which is the point.
+
+**Assertions**
+
+| # | Case | Check |
+| :- | :--- | :---- |
+| 1 | READ feedback (enter `0x0440`, `A=0x47`, `0x58..=11..66`) | `0x68..0x6E = 47 11 22 33 44 55 66`; TX buffer mode `0x25=0x02` |
+| 2 | TX helper (enter `0x0541`) | last byte sets `0x25.4` (`0x25=0x12`); next call reaches ETX `0x0553` (`MOV SBUF,#0x03`) and clears `0x25.1` |
+| 3 | WRITE position (enter `0x0440`, `A=0x02`, `0x60=0x80`) | axis-2 slot `0x52=0x80`; ACK mode `0x25=0x80` |
+| 4 | RESET-ACK (enter `0x0785`, `0x23.7=1 0x24.2=1 0x18=1`) | `R4=0xF1`; parser reset `0x24=0x00`; TX armed `0x25=0x08` |
+
+Case 4 reproduces the documented bench handshake in `hardware/host/README.md`
+(`printf '\x20'` after reset → a flood of `0xF1`). Runs on stock `s51`.
+
+## `sim_serial_autobaud.sh` — software auto-baud brings the UART up
+
+**Premise.** Prove the ROB3 **software auto-baud** path runs to completion,
+using the `rxd` cl_hw module to drive the raw **P3.0 (RXD)** pin at bit level
+(which ucSim's byte-level core UART does not do — see
+`../issues/003-mcs51-uart-does-not-drive-rxd-txd-pins/`).
+
+**Flow.** Reach the auto-detect start-bit spin (`0x06BF`), shift the training
+byte `0x20` on `P3.0` at the lock bit time (128 machine cycles/bit), and assert
+the firmware completes at `0x073C` with `TH1=0xFC`, `TR1` set, and `IE=0x17`
+(ES enabled).
+
+**Opt-in.** Needs a loader-enabled `ucsim_51` plus the `adc` + `rxd` modules;
+**skips** cleanly otherwise.
+
+**Baud note.** `hardware/host/README.md` uses 9600 8N1, but in this ucSim model the
+auto-baud validation window is ~104..152 machine cycles/bit (centred ~128); 9600
+(96 cyc/bit) is just below and does not lock, and 115200 (8 cyc/bit) is far
+outside. The firmware always derives `TH1=0xFC`. The wire-baud vs cycles/bit
+offset is a modelling artifact; the verified fact is that the auto-baud path
+completes and arms the UART. Full findings in `../ucsim-modules/rxd/README.md`.
+
+## `sim_serial_e2e.sh` — full serial RX chain over the real wire
+
+**Premise.** Prove a byte travels the entire real path — not by entering the ISR
+with seeded state. Chains the `rxd` auto-baud bring-up with the core UART's
+byte-level reception once the baud is set.
+
+**Flow.** `rxd` shifts the training byte `0x20` on P3.0 → firmware locks
+(TH1=0xFC, TR1, IE=0x17) and transmits its `0x15` ACK on the serial **output** →
+a command byte `0x47` on the serial **input** is clocked by the core UART into
+`SBUF` (=0x47) with RI set (SCON=0x51) → the RX ISR at `0x0300` runs → the RX
+parser advances (`0x24`=0x07).
+
+**Opt-in.** Needs a loader-enabled `ucsim_51` + the `adc` + `rxd` modules + a
+ucSim `-S` serial link; **skips** cleanly otherwise. This is the seam the
+seeded-entry `sim_serial.sh` deliberately bypasses (ucSim's `MOV A,SBUF` returns
+the model's internal `s_in`, so the logic-level tests enter after the SBUF read;
+this test uses the genuine UART path).
 
 ---
 

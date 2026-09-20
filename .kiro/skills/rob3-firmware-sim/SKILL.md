@@ -3,11 +3,13 @@ name: rob3-firmware-sim
 description: >
   ROB3-specific firmware build, verification, and simulation workflow: the
   two-layer golden-byte-match + behavioral-sim model, the Makefile targets
-  (verify / sim-init / sim-run / sim-teachbox / sim-teachbox-axis / gen), the
-  ucSim `@`-filename segfault workaround, the `run N` vs `step N` bounded-advance
-  gotcha, the XRAM peripheral-window seeding table, injected hardware stimulus as
-  test scaffolding, the compiled teachbox / adc / loopback `cl_hw` modules, the
-  P3.2/P3.4 emergency-off + poll gates that keep the sim teachbox silent, the
+  (verify / sim-init / sim-run / sim-serial / sim-teachbox / sim-teachbox-axis /
+  gen), the ucSim `@`-filename segfault workaround, the `run N` vs `step N`
+  bounded-advance gotcha, the XRAM peripheral-window seeding table, injected
+  hardware stimulus as test scaffolding, the compiled teachbox / adc / loopback /
+  rxd `cl_hw` modules, the byte-level UART (no RXD/TXD pins; auto-baud-only
+  serial) and the rxd pin-driver, the P3.2/P3.4 emergency-off + poll gates that
+  keep the sim teachbox silent, the
   keypad (row,group)->index map and debounce release-then-hold protocol, verified
   entry points/state, and the Python batch + interactive harnesses. Use when
   building, verifying, simulating, or extending the ROB3 8031 firmware and its
@@ -65,6 +67,9 @@ transcribed**.
 | `make sim-teachbox` | Behavioral: run the keypad scanner, assert key decode. |
 | `make sim-teachbox-module` | Behavioral: exercise the compiled teachbox `cl_hw` module (opt-in; skips w/o custom `ucsim_51`). |
 | `make sim-adc` | Behavioral: free-run past the ADC/INT1 gate via the compiled adc `cl_hw` module (opt-in). |
+| `make sim-serial` | Behavioral: RS-232 protocol dispatch/framing (read/write/ETX/reset-ACK) by seeded entry; runs on stock `s51`. |
+| `make sim-serial-autobaud` | Behavioral: software auto-baud brings the UART up via the `rxd` `cl_hw` pin driver (opt-in; needs loader `ucsim_51` + adc/rxd). |
+| `make sim-serial-e2e` | Behavioral: **full RX chain** — auto-baud lock → real byte over `-S` link → SBUF/RI → RX ISR, with the adc servo ISR concurrent (opt-in). |
 | `make sim-teachbox-axis` | **Black-box** keypad axis-select → POSITION mode via the real scanner+handler (opt-in; needs teachbox **and** loopback modules). |
 | `make test` | `verify` + all `sim-*`. |
 | `make gen` | Regenerate the byte-exact `.a51` sources from the ROM (via `gen_init.py`). |

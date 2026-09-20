@@ -48,8 +48,8 @@ SIMFLAGS   := -t 51 -X 11.0592M
 SAFEHEX    := $(BUILD)/rob3.hex
 
 .PHONY: all verify verify-init verify-teachbox \
-        sim-init sim-run sim-teachbox sim-teachbox-module sim-adc \
-        sim-teachbox-axis demo-teachbox test gen clean help
+        sim-init sim-run sim-teachbox sim-teachbox-module sim-adc sim-serial \
+        sim-serial-autobaud sim-serial-e2e sim-teachbox-axis demo-teachbox test gen clean help
 
 all: verify ## Default: assemble all regions and prove they match the ROM
 
@@ -99,6 +99,18 @@ sim-run: $(SAFEHEX) ## Run init past the ADC/INT1 gate (inject EOC) to main loop
 	@SAFEHEX=$(SAFEHEX) SIM="$(SIM)" SIMFLAGS="$(SIMFLAGS)" \
 		$(SIMDIR)/tests/sim_run.sh
 
+sim-serial: $(SAFEHEX) ## Behavioral: RS-232 protocol dispatch/framing (read/write/ETX/reset-ACK)
+	@SAFEHEX=$(SAFEHEX) SIM="$(SIM)" SIMFLAGS="$(SIMFLAGS)" \
+		$(SIMDIR)/tests/sim_serial.sh
+
+sim-serial-autobaud: $(SAFEHEX) ## Behavioral: software auto-baud brings UART up via the rxd cl_hw pin driver (opt-in; skips w/o loader ucsim_51 + adc/rxd modules)
+	@SAFEHEX=$(SAFEHEX) UCSIM_51="$(UCSIM_51)" SIMFLAGS="$(SIMFLAGS)" \
+		$(SIMDIR)/tests/sim_serial_autobaud.sh
+
+sim-serial-e2e: $(SAFEHEX) ## Behavioral: FULL serial RX chain — auto-baud lock -> real byte over -S link -> SBUF/RI -> RX ISR (opt-in; skips w/o loader ucsim_51 + adc/rxd)
+	@SAFEHEX=$(SAFEHEX) UCSIM_51="$(UCSIM_51)" SIMFLAGS="$(SIMFLAGS)" \
+		$(SIMDIR)/tests/sim_serial_e2e.sh
+
 sim-teachbox: $(SAFEHEX) ## Behavioral: run the keypad scanner, assert key decode
 	@SAFEHEX=$(SAFEHEX) SIM="$(SIM)" SIMFLAGS="$(SIMFLAGS)" \
 		$(SIMDIR)/tests/sim_teachbox.sh
@@ -119,7 +131,7 @@ demo-teachbox: $(SAFEHEX) ## Demo: teachbox key press -> axis-select -> jog -> a
 		$(SIMDIR)/tests/demo_teachbox_axis.sh
 
 # ---- Aggregate ---------------------------------------------------------------
-test: verify sim-init sim-run sim-teachbox sim-teachbox-module sim-adc sim-teachbox-axis ## Run all tests (golden + behavioral)
+test: verify sim-init sim-run sim-serial sim-serial-autobaud sim-serial-e2e sim-teachbox sim-teachbox-module sim-adc sim-teachbox-axis ## Run all tests (golden + behavioral)
 	@echo "ALL TESTS PASSED"
 
 # ---- Regenerate the byte-exact sources from the ROM --------------------------

@@ -23,6 +23,7 @@ Each module lives in its own subfolder with its own README:
 | Teachbox | `cl_teachbox` | [`teachbox/`](teachbox/) | Models the 5x5 key matrix (input on P1 + the 8255 Port B row strobe) so `kbd_scan` reads pressed keys. |
 | ADC | `cl_adc` | [`adc/`](adc/) | Models the ADC0808/0809; serves per-channel feedback and **asserts EOC → INT1**, letting the ROM **free-run past the init gate** from a plain `reset; run`. |
 | Loopback | `cl_loopback` | [`loopback/`](loopback/) | Models the **RS-232 shorting connector** / MM74C04N #1 conditioning: holds P3.2 (INT0/EMERGENCY-OFF) and P3.4 (T0/poll-gate) HIGH so the ROM leaves the emergency-off handler and reaches the teachbox poll. |
+| RXD | `cl_rxd` | [`rxd/`](rxd/) | Drives the **P3.0 (RXD) pin at bit level** (8N1, configurable cycles/bit) so the firmware's software auto-baud measure loop can run. Supplies the pin activity ucSim's byte-level UART omits (see [issue 003](../issues/003-mcs51-uart-does-not-drive-rxd-txd-pins/)). |
 
 Module-specific behaviour, commands, and verification are in each subfolder's
 README.

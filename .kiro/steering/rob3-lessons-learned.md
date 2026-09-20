@@ -100,6 +100,34 @@ straight into 0x0003 → 0x0040 and loops in 0x0047..0x0054.
   (fire the change event), which is why the loopback module writes the P3 latch
   via `cell->write()` on each `tick()`, not `cell->set()`.
 
+### ucSim's MCS-51 UART is byte-level and never drives the RXD/TXD pins
+`cl_serial` (`src/sims/s51.src/serial.cc`) delivers a whole received byte into
+`SBUF`/`RI` and writes a whole transmitted byte out; it **never toggles P3.0
+(RXD) or P3.1 (TXD)**. Two consequences bit this project:
+- **`MOV A,SBUF` returns the model's internal `s_in`, not the SBUF SFR cell**,
+  and a write to SBUF sets `s_out`. So you **cannot inject a received byte with
+  `set mem sfr 0x99`**, and you **cannot observe a transmitted byte with
+  `dump sfr 0x99`**. Protocol logic tests therefore enter the ISR *after* the
+  SBUF read (seed `A`/the RX buffer) — see `simulator/tests/sim_serial.sh`.
+- **Firmware that bit-bangs the RXD pin cannot run.** ROB3's software auto-baud
+  polls the raw P3.0 pin (`JB P3.0,$` at 0x06BF) and times edges with Timer 0;
+  with no pin activity it spins forever. Fix: the **`rxd` cl_hw module**
+  (`simulator/ucsim-modules/rxd/`) shifts an 8N1 frame out on P3.0 at a
+  configurable machine-cycles/bit (through the port write path). Once auto-baud
+  sets TH1/TR1 the CORE UART receives normally — so use `-S in=,out=` for the
+  actual command bytes and `rxd` only for the pin-level bring-up. Filed as
+  `simulator/issues/003-mcs51-uart-does-not-drive-rxd-txd-pins/`.
+
+### ROB3 serial only works on the AUTO-BAUD path (P3.0=1), not fixed-baud
+The fixed-baud strap path (P3.0=0 at 0x06A7) sets `IE=0x07` (**no ES** — serial
+interrupt disabled) and never starts Timer 1 or writes TH1, so the UART receiver
+is not armed. Only the auto-detect path ends with `IE=0x17` (ES on) + TR1
+running. The auto-baud validation (`(run/6+8)&0xF0==0x20` at 0x070A) accepts a
+narrow bit-time window (≈≤38400 at 11.0592 MHz; **115200 is out of range**) and
+always derives **TH1=0xFC**. In the `rxd` sim model the lock lands at ~128
+machine-cycles/bit (~7200); 9600 is just below the window — a modelling artifact
+of representing the line in cycles, not a firmware defect.
+
 ## 8051 disassembly / annotation
 
 ### Byte-vs-bit operands (recurring)

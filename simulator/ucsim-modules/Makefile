@@ -18,7 +18,7 @@ SDK          ?= $(UCSIM_PREFIX)/share/ucsim/sdk
 
 include $(SDK)/ucsim-plugin.mk
 
-MODULES = loopback adc teachbox
+MODULES = loopback adc teachbox rxd
 PLUGINS = $(foreach m,$(MODULES),$(m)/$(m).so)
 
 all: $(PLUGINS)
@@ -27,6 +27,7 @@ all: $(PLUGINS)
 loopback/loopback.so: SRCS = loopback/loopback.cc
 adc/adc.so:           SRCS = adc/adc.cc
 teachbox/teachbox.so: SRCS = teachbox/teachbox.cc
+rxd/rxd.so:           SRCS = rxd/rxd.cc
 
 $(PLUGINS):
 	$(CXX) $(CXXFLAGS) $(UCSIM_PLUGIN_INCLUDES) -I$(@D) $(SRCS) -o $@

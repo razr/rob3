@@ -146,6 +146,10 @@ serial_vector:
 ;       030A: E5 99        MOV  A,SBUF       ; read received byte
 ;       030C: 75 18 14     MOV  0x18,#0x14   ; reload serial timeout counter
 ;
+;   FULL HANDLER: the RS-232 UART ISR (0x0300, RX/TX + binary command protocol)
+;   and its transmit helper (0x0541) are annotated instruction-by-instruction
+;   in firmware/src/annotated/rs232_serial.annotated.asm.                   [BYTE]
+;
 ;   CORRECTION HISTORY: an earlier draft first claimed "LJMP 0x0300 at 0x0023"
 ;   (wrong address), then wrongly claimed "no serial handler exists". Both were
 ;   incorrect. The truth (verified from ROM bytes): vector slot is 0xFF, the
@@ -448,19 +452,50 @@ speed_loop:
         mov     SFR_IE,#0x07        ; 0xA8: IE = 0x07 -> EX0+ET0+EX1 (fixed/fast path; ES not set)
         setb    SYS_BAUD_DET        ; 0x20.2 flag = "baud ready"
         ajmp    init_finish         ; skip auto-detect, go finish init
-;   NOTE: the fixed-baud path above enables EX0+ET0+EX1 but NOT the serial
-;   interrupt (ES). The auto-detect path instead ends with MOV IE,#0x17 at
-;   0x0739, which DOES set ES (serial) -> RS232 is interrupt-driven there.  [BYTE]
+;   NOTE (fixed-baud path): this enables EX0+ET0+EX1 but NOT the serial
+;   interrupt (ES), AND it never starts Timer 1 (TR1) or writes TH1. So the
+;   UART receiver is NOT armed on this path — serial comms does not work with
+;   the P3.0=0 strap. Verified [BYTE][SIM]: at the main loop on this path,
+;   IE=0x87 (no ES), TCON=0x1A (TR1 clear), TH1=0x00. The ONLY working serial
+;   path is auto-detect (P3.0=1), which ends with MOV IE,#0x17 (ES set) and
+;   Timer 1 running. See firmware/src/annotated/rs232_serial.annotated.asm
+;   (AUTO-BAUD section) and simulator/tests/sim_serial_autobaud.sh.        [BYTE][SIM]
 
 baud_detect:
         jb      0xB0.2,$+5          ; sample P3.2 (0xB0.2) [INFER: line-idle check]
         setb    SYS_BAUD_DET        ; 0x20.2 flag = "baud ready"
 ;------------------------------------------------------------------------------
-; (12b) Baud-rate auto-detection: measure the width of an incoming serial
-;       edge on P3.0 using TIMER 0 (TL0/TH0 cleared, SETB TR0 below), then
-;       derive the Timer-1 reload (TH1) so the UART baud matches the host.
-;       Full inner-loop math continues past 0x06B6; annotated at instruction
-;       level below. Behavior (measured value) is [SIM]-pending.           [BYTE]
+; (12b) SOFTWARE AUTO-BAUD (0x06B6..0x073B).                            [BYTE][SIM]
+;   The firmware measures the width of the incoming training byte on the RAW
+;   P3.0 (RXD) pin using TIMER 0, then derives the Timer-1 reload (TH1).
+;   Sequence:
+;     - clear TL0/TH0, wait for the P3.0 start-bit edge (0x06BF JB P3.0,$),
+;       SETB TR0, then capture 4 edge widths into a buffer (0x06E4 records
+;       TL0/TH0 per edge; TCON.5/TF1 is the overrun-timeout guard);
+;     - normalize (right-shift loop 0x06FA) and VALIDATE at 0x070A: for each of
+;       three runs, (run/6 + 8) & 0xF0 must == 0x20 (else re-measure). This
+;       accepts a training byte 0x20 whose bit width falls in a bounded window;
+;     - derive TH1 = ~(R7-1) (0x0733: MOV TH1,A), SETB TR1 (start baud timer),
+;       send 0x15 via SBUF, then MOV IE,#0x17 (enable ES). [BYTE]
+;
+;   [SIM] Verified end-to-end with the `rxd` cl_hw pin-driver
+;   (simulator/ucsim-modules/rxd/) shifting the training byte 0x20 on P3.0:
+;   the ROM leaves the 0x06BF spin, captures the edges, validates, and reaches
+;   0x073C (init_finish) with TH1=0xFC, TR1 set (TCON=0xF0), IE=0x17. Stock
+;   ucSim CANNOT drive P3.0 at bit level, so without that module the loop spins
+;   forever (simulator/issues/003-mcs51-uart-does-not-drive-rxd-txd-pins).
+;
+;   BAUD FINDINGS (this XTAL = 11.0592 MHz):
+;     - The validation window (run/6+8 & 0xF0 == 0x20) accepts a training bit
+;       time of roughly 104..152 machine cycles/bit in the sim model (~6.1..8.9
+;       kbaud as measured), centred ~128 cyc/bit (~7200). It always derives
+;       TH1=0xFC. 9600 (96 cyc/bit) and 115200 (8 cyc/bit) fall OUTSIDE the
+;       window and do NOT lock. [SIM]
+;     - TH1=0xFC -> reload 4 -> nominal UART baud f/(32*(256-TH1)) = 86400 at
+;       SMOD=0 (the derived operating rate, distinct from the training rate).
+;     - The absolute wire-baud vs machine-cycle-per-bit scaling in the sim is a
+;       modelling artifact (Timer-0 mode-1 count vs our cycle-based pin timing);
+;       the VERIFIED fact is that the auto-baud path completes and arms the UART.
 ;------------------------------------------------------------------------------
 baud_measure:
         clr     A
