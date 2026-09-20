@@ -101,6 +101,46 @@ else
   die "reset-ack: expected 0x24=0x00 0x25=0x08, got '$row24'" "$OUT4"
 fi
 
+# --- 5) command ROUTING confirmation (hardware/host/command.md) ---------------
+# Drive the REAL dispatch: enter rx_dispatch (0x03A9) with A=ETX(0x03) and
+# R6=header, run to serial_exit, and check the documented effect.
+route() { # header_hex  "dump-addr row-regex"  awk-cols
+  local h="$1"
+  printf 'reset\nset mem iram 0x40 0 0 0 0 0 0\nset mem iram 0x50 0 0 0 0 0 0\nset mem iram 0x58 0x11 0x22 0x33 0x44 0x55 0x66\nset mem iram 0x60 0x80 0x81 0x82 0x83 0x84 0x85\nset mem iram 0x2b 0\nset mem iram 0x68 0 0 0 0 0 0 0\nset mem iram 0x20 0\nset mem iram 0x06 0x%s\nset mem sfr 0xe0 0x03\npc 0x03a9\nbreak 0x0525\nstep 200\ndump iram 0x40 0x45\ndump iram 0x50 0x55\ndump iram 0x68 0x6e\ndump iram 0x2b 0x2b\ndump iram 0x20 0x20\nquit\n' "$h" \
+    | run_sim
+}
+row() { grep -E "^0x$1" <<<"$2" | tail -1 | awk '{$1="";print}' | sed 's/^ *//'; }
+
+O="$(route 4f)"    # all-axis position query
+if [[ "$(row 68 "$O" | awk '{print $1,$2,$3,$4,$5,$6,$7}')" == "4f 11 22 33 44 55 66" ]]; then
+  pass "cmd 0x4F (all-axis query): response = header + 6 feedback bytes"
+else die "cmd 0x4F routing" "$O"; fi
+
+O="$(route 00)"    # single-axis position axis0
+if [[ "$(row 50 "$O" | awk '{print $1}')" == "80" ]]; then
+  pass "cmd 0x00 (single-axis position): position[axis0] = setpoint 0x80"
+else die "cmd 0x00 routing" "$O"; fi
+
+O="$(route 77)"    # all-axis target + speed (arms motion)
+if [[ "$(row 40 "$O" | awk '{print $1,$2,$3,$4,$5,$6}')" == "80 81 82 83 84 85" && "$(row 2b "$O" | awk '{print $1}')" == "3f" ]]; then
+  pass "cmd 0x77 (all-axis pos+speed): targets set + motion mask 0x2B=0x3F"
+else die "cmd 0x77 routing" "$O"; fi
+
+O="$(route 61)"    # motor enable
+if [[ "$(row 20 "$O" | awk '{print $1}')" == "01" ]]; then
+  pass "cmd 0x61 (motor enable): axis-enable flag 0x20.0 set"
+else die "cmd 0x61 routing" "$O"; fi
+
+O="$(route 62)"    # positioning shutdown: snapshot feedback -> positions
+if [[ "$(row 50 "$O" | awk '{print $1,$2,$3,$4,$5,$6}')" == "11 22 33 44 55 66" ]]; then
+  pass "cmd 0x62 (shutdown/retain): positions snapshot from feedback"
+else die "cmd 0x62 routing" "$O"; fi
+
+O="$(route 63)"    # serial-number query
+if [[ "$(row 68 "$O" | awk '{print $1}')" == "63" ]]; then
+  pass "cmd 0x63 (serial number): response begins with the command keyword 0x63"
+else die "cmd 0x63 routing" "$O"; fi
+
 if [[ $fail -eq 0 ]]; then
   echo "sim_serial: OK"
 else

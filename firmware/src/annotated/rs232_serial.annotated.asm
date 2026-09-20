@@ -254,11 +254,14 @@ rx_all_setup:                       ; 0x03A3  (all-axes frame: re-arm for 6 byte
 ;==============================================================================
 rx_dispatch:                        ; 0x03A9
         anl     0x24,#0xC0          ; 03A9: 53 24 C0  clear RX state bits (keep .6/.7)
-        mov     R4,#0xF3            ; 03AC: 7C F3  default status/response byte        [INFER]
-        cjne    A,#0x03,cmd_generic ; 03AE: A(header remainder)!=3 -> 0x03C1          [INFER]
-        mov     A,R6                ; 03B3: reload header
-        mov     R5,A                ; 03B4: stage it as a response data byte
-        jnb     0xE0.7,cmd_class0   ; 03B5: header.7 clear -> 0x0440 (axis/position)
+        mov     R4,#0xF3            ; 03AC: 7C F3  default status/response byte        [SIM]
+        cjne    A,#0x03,cmd_generic ; 03AE: A holds the LAST byte of the frame; it must
+                                    ;   be ETX (0x03, the documented frame terminator)
+                                    ;   or the command is rejected -> cmd_generic.    [SIM]
+        mov     A,R6                ; 03B3: frame was ETX-terminated -> reload the
+                                    ;   saved HEADER byte and decode the command      [SIM]
+        mov     R5,A                ; 03B4: stage the header as a response data byte
+        jnb     0xE0.7,cmd_class0   ; 03B5: header.7 clear -> 0x0440 (axis/position)  [SIM]
         inc     R4                  ; 03B8: R4 = 0xF4
         subb    A,#0x80             ; 03B9: A -= 0x80 (index into system commands)     [INFER]
         mov     R6,A                ; 03BB: save sub-code
