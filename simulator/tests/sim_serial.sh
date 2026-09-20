@@ -141,6 +141,23 @@ if [[ "$(row 68 "$O" | awk '{print $1}')" == "63" ]]; then
   pass "cmd 0x63 (serial number): response begins with the command keyword 0x63"
 else die "cmd 0x63 routing" "$O"; fi
 
+# --- 6) UNDOCUMENTED digital-input read (0x56): appends 0x5F + P1 -------------
+DI="$(printf 'reset\nset mem iram 0x5e 0xAE\nset mem iram 0x5f 0xAF\nset mem sfr 0x90 0x9A\nset mem iram 0x68 0 0 0 0 0 0 0\nset mem iram 0x06 0x56\nset mem sfr 0xe0 0x03\npc 0x03a9\nbreak 0x0525\nstep 300\ndump iram 0x68 0x6e\nquit\n' | run_sim)"
+di68="$(grep -E '^0x68' <<<"$DI" | tail -1 | awk '{print $2,$3,$4}')"
+if [[ "$di68" == "56 af 9a" ]]; then
+  pass "hidden cmd 0x56 (digital-input read): response = 56 + 0x5F(AF) + P1(9A)"
+else
+  die "hidden cmd 0x56: expected '56 af 9a', got '$di68'" "$DI"
+fi
+
+# --- 7) control block ignores bits 3:2 -> 0x65 aliases 0x61 (motor enable) ----
+AL="$(printf 'reset\nset mem iram 0x20 0\nset mem iram 0x06 0x65\nset mem sfr 0xe0 0x03\npc 0x03a9\nbreak 0x0525\nstep 300\ndump iram 0x20 0x20\nquit\n' | run_sim)"
+if [[ "$(grep -E '^0x20' <<<"$AL" | tail -1 | awk '{print $2}')" == "01" ]]; then
+  pass "alias 0x65 == 0x61 (control block ignores bits 3:2; enable sets 0x20.0)"
+else
+  die "alias 0x65 routing" "$AL"
+fi
+
 if [[ $fail -eq 0 ]]; then
   echo "sim_serial: OK"
 else

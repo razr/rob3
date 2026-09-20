@@ -230,3 +230,47 @@ Notes:
   confirmed: `0x15` is sent at the end of auto-baud lock, `0xF1` is the
   idle-timeout reset-ACK (main loop `0x0785`, `mov R4,#0xF1`); `0xF2`/`0xF3`
   are other staged status bytes (`0x0437`/`0x03AC`). See the annotated file.
+
+## Undocumented / hidden behaviour found in the ROM  [SIM]
+
+An exhaustive sweep of every header `0x00..0xFF` through the dispatch turned up
+behaviour the manual does not list. None are secret "extra features" beyond one
+family (the digital-input read); the rest are **decoding aliases** — the firmware
+does not check every bit, so several byte values map onto the same handler.
+
+### 1. Digital-input read commands (genuinely undocumented)
+The read path has a branch (`c0_read_dig`, `0x0471`) taken when **bit 4 = 1** in
+the `010x` class, i.e. headers `0x50..0x57`. Instead of an axis pot it appends
+**auxiliary/digital-input** bytes, selected by the low bits of the header:
+- bit 0 → append RAM `0x5E`  (DI state, "Additional I/O" — see
+  docs/reverse_engineering_notes.md, hardware/connectors/db25.md DI1..DI8)
+- bit 1 → append RAM `0x5F`  (DI state)
+- bit 2 → append P1 (`0x90`)
+
+So e.g. `0x56` → response `[56, 0x5F, P1, ETX]`; `0x5F` → `[5F, 0x5E, 0x5F, P1,
+ETX]`. These read the robot's **digital inputs** over serial and are not in the
+command table above. (The axis-6/7 arithmetic aliases `0x46`/`0x4E` also happen
+to read `0x5E` as "axis 6 feedback".)  [SIM] verified; the electrical meaning of
+each DI bit is [HW] per db25.md.
+
+### 2. Aliases from partial bit decoding (not new commands)
+- **Control block ignores bits 3:2.** `0x60..0x63` (disable / enable / shutdown /
+  serial-number) repeat every 4: `0x64/0x68/0x6C` == `0x60`, `0x65/0x69/0x6D` ==
+  `0x61`, etc. So `0x64..0x6F` behave as `0x60..0x63`.
+- **Acknowledge-bit variants.** Any command with bit 3 set (`R=1`) routes to the
+  same handler as its `R=0` form and additionally sets the ack flag `0x23.1`
+  (e.g. `0x08..0x0D` == `0x00..0x05` + ack; `0x78..0x7D` == `0x70..0x75` + ack;
+  `0x0F` == `0x07` + ack). This is the documented `R` bit, just not enumerated.
+- **Invalid axis 6** (`0x46/0x66/0x76/...`, axis field = 6) is not a real axis;
+  the arithmetic still runs and yields out-of-range reads/masks. Not a command.
+
+### 3. Frame terminator is enforced
+A frame is only acted on if its last byte is ETX `0x03` (`cjne A,#0x03` at
+`0x03AE`); otherwise the header is discarded to the generic-ack path. So a
+"command" is really `<header> [payload...] 0x03`.
+
+> Provenance: routing/aliasing is [SIM] (swept 0x00..0xFF through `rx_dispatch`
+> and observed state); the DI bit-to-connector mapping is [HW] (db25.md); the
+> "no other hidden commands" claim is bounded by this single-frame dispatch
+> sweep — the program-interpreter (`0x81` block / `0x89..0x8F` download) and the
+> system class (`hdr.7=1`) were exercised only in their empty/no-program state.
