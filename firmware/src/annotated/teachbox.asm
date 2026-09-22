@@ -329,15 +329,21 @@
 ;   @R1 = 0x6D      (write the accumulated low byte into the axis position)
 ;------------------------------------------------------------------------------
         .org    0x0C00
+;
+;==============================================================================
+; kbd_scan (0x0C00) — strobe each of the 5 matrix rows via 8255 Port B, read
+;   the column groups on P1 (top 3 bits), debounce, and return the key index
+;   in R6 (0 = none). key index = row+1 + (group-1)*8.
+;==============================================================================
         jbc 0x01, L_0C64                    ; 10 01 61  0C00
-        mov 0x83, #0x51                     ; 75 83 51  0C03
+        mov SFR_DPH, #DEV_8255_PB                     ; 75 83 51  0C03
         mov R6, #0x00                       ; 7E 00  0C06
         mov A, 0x47                         ; E5 47  0C08
         anl A, #0x0F                        ; 54 0F  0C0A
 L_0C0C:
         movx @DPTR, A                       ; F0  0C0C
-        mov 0x46, A                         ; F5 46  0C0D
-        mov A, 0x90                         ; E5 90  0C0F
+        mov KBD_STROBE, A                         ; F5 46  0C0D
+        mov A, SFR_P1                         ; E5 90  0C0F
         anl A, #0xE0                        ; 54 E0  0C11
         jz L_0C2F                           ; 60 1A  0C13
         jb 0xE5, L_0C1C                     ; 20 E5 04  0C15
@@ -396,33 +402,21 @@ L_0C64:
         mov 0x56, A                         ; F5 56  0C67
         clr 0x06                            ; C2 06  0C69
         ret                                 ; 22  0C6B
-        mov R7, A                           ; FF  0C6C
-        mov R7, A                           ; FF  0C6D
-        mov R7, A                           ; FF  0C6E
-        mov R7, A                           ; FF  0C6F
-        mov R7, A                           ; FF  0C70
-        mov R7, A                           ; FF  0C71
-        mov R7, A                           ; FF  0C72
-        mov R7, A                           ; FF  0C73
-        mov R7, A                           ; FF  0C74
-        mov R7, A                           ; FF  0C75
-        mov R7, A                           ; FF  0C76
-        mov R7, A                           ; FF  0C77
-        mov R7, A                           ; FF  0C78
-        mov R7, A                           ; FF  0C79
-        mov R7, A                           ; FF  0C7A
-        mov R7, A                           ; FF  0C7B
-        mov R7, A                           ; FF  0C7C
-        mov R7, A                           ; FF  0C7D
-        mov R7, A                           ; FF  0C7E
-        mov R7, A                           ; FF  0C7F
+; --- 0x0C6C..0x0C7F : 0xFF-count 20 0xFF EPROM padding (objcopy gap-fill) ---
+;
+;==============================================================================
+; kbd_handle (0x0C80) — process a captured key: axis-select, mode dispatch,
+;   numeric entry, jog, program keys. Entered from main loop when kbd_scan
+;   returns nonzero in A.
+;==============================================================================
+        .org    0x0C80
         dec A                               ; 14  0C80
         cjne A, #0x0E, L_0C8D               ; B4 0E 09  0C81
 L_0C84:
         clr A                               ; E4  0C84
         mov 0x6D, A                         ; F5 6D  0C85
-        mov 0x2A, A                         ; F5 2A  0C87
-        orl 0x47, #0xF8                     ; 43 47 F8  0C89
+        mov EDIT_STATE, A                         ; F5 2A  0C87
+        orl LED_LATCH, #0xF8                     ; 43 47 F8  0C89
         ret                                 ; 22  0C8C
 L_0C8D:
         jb 0x57, L_0CEA                     ; 20 57 5A  0C8D
@@ -430,8 +424,8 @@ L_0C8D:
         setb 0x57                           ; D2 57  0C93
         cjne A, #0x0A, L_0CA1               ; B4 0A 09  0C95
         mov R3, #0x20                       ; 7B 20  0C98
-        mov 0x29, #0x20                     ; 75 29 20  0C9A
-        anl 0x47, #0xF7                     ; 53 47 F7  0C9D
+        mov EDIT_MODE, #0x20                     ; 75 29 20  0C9A
+        anl LED_LATCH, #0xF7                     ; 53 47 F7  0C9D
         ret                                 ; 22  0CA0
 L_0CA1:
         jnc L_0CB2                          ; 50 0F  0CA1
@@ -443,7 +437,7 @@ L_0CA7:
         setb 0x55                           ; D2 55  0CA9
         add A, #0x50                        ; 24 50  0CAB
         mov R1, A                           ; F9  0CAD
-        mov 0x29, #0x40                     ; 75 29 40  0CAE
+        mov EDIT_MODE, #0x40                     ; 75 29 40  0CAE
 L_0CB1:
         ret                                 ; 22  0CB1
 L_0CB2:
@@ -452,17 +446,18 @@ L_0CB2:
         add A, R6                           ; 2E  0CB6
         add A, R6                           ; 2E  0CB7
         subb A, #0x28                       ; 94 28  0CB8
-        mov 0x29, A                         ; F5 29  0CBA
+        mov EDIT_MODE, A                         ; F5 29  0CBA
         add A, #0x02                        ; 24 02  0CBC
         mov R3, A                           ; FB  0CBE
         inc A                               ; 04  0CBF
+;--- MOVC DATA: LED segment / display lookup (3 reads from inline table) ---
         movc A, @A + PC                     ; 83  0CC0
         xch A, R3                           ; CB  0CC1
         movc A, @A + PC                     ; 83  0CC2
         xch A, 0x29                         ; C5 29  0CC3
         movc A, @A + PC                     ; 83  0CC5
-        anl 0x47, #0x0F                     ; 53 47 0F  0CC6
-        orl 0x47, A                         ; 42 47  0CC9
+        anl LED_LATCH, #0x0F                     ; 53 47 0F  0CC6
+        orl LED_LATCH, A                         ; 42 47  0CC9
         ret                                 ; 22  0CCB
         mov 0xA0, R0                        ; 88 A0  0CCC
         movx @DPTR, A                       ; F0  0CCE
@@ -489,16 +484,16 @@ L_0CF2:
         mov A, R3                           ; EB  0CF2
         xrl A, #0x02                        ; 64 02  0CF3
         mov R3, A                           ; FB  0CF5
-        anl 0x47, #0xF7                     ; 53 47 F7  0CF6
+        anl LED_LATCH, #0xF7                     ; 53 47 F7  0CF6
         jnb 0x52, L_0D03                    ; 30 52 07  0CF9
         mov 0x6C, 0x6D                      ; 85 6D 6C  0CFC
-        mov 0x29, #0x10                     ; 75 29 10  0CFF
+        mov EDIT_MODE, #0x10                     ; 75 29 10  0CFF
         ret                                 ; 22  0D02
 L_0D03:
-        mov 0x29, #0x30                     ; 75 29 30  0D03
+        mov EDIT_MODE, #0x30                     ; 75 29 30  0D03
         cjne A, #0x10, L_0D0F               ; B4 10 06  0D06
-        mov 0x29, #0x08                     ; 75 29 08  0D09
-        mov 0x47, 0x1F                      ; 85 1F 47  0D0C
+        mov EDIT_MODE, #0x08                     ; 75 29 08  0D09
+        mov LED_LATCH, 0x1F                      ; 85 1F 47  0D0C
 L_0D0F:
         ret                                 ; 22  0D0F
 L_0D10:
@@ -510,8 +505,8 @@ L_0D10:
         jb 0x4C, L_0D42                     ; 20 4C 22  0D1D
         jbc 0x4B, L_0D2A                    ; 10 4B 07  0D20
 L_0D23:
-        mov 0x2A, #0x40                     ; 75 2A 40  0D23
-        anl 0x47, #0x0F                     ; 53 47 0F  0D26
+        mov EDIT_STATE, #0x40                     ; 75 2A 40  0D23
+        anl LED_LATCH, #0x0F                     ; 53 47 0F  0D26
         ret                                 ; 22  0D29
 L_0D2A:
         jz L_0D23                           ; 60 F7  0D2A
@@ -521,7 +516,7 @@ L_0D2F:
         mov R4, A                           ; FC  0D31
         cjne R3, #0x10, L_0D3B              ; BB 10 06  0D32
         clr 0x52                            ; C2 52  0D35
-        mov 0x29, #0x48                     ; 75 29 48  0D37
+        mov EDIT_MODE, #0x48                     ; 75 29 48  0D37
         ret                                 ; 22  0D3A
 L_0D3B:
         acall 0x0FC4                        ; F1 C4  0D3B
@@ -542,14 +537,19 @@ L_0D4D:
         ret                                 ; 22  0D55
 L_0D56:
         jb 0x49, L_0D61                     ; 20 49 08  0D56
-        mov 0x29, #0x40                     ; 75 29 40  0D59
+        mov EDIT_MODE, #0x40                     ; 75 29 40  0D59
         ret                                 ; 22  0D5C
 L_0D5D:
         orl 0x29, #0xA0                     ; 43 29 A0  0D5D
         ret                                 ; 22  0D60
 L_0D61:
-        mov 0x29, #0x80                     ; 75 29 80  0D61
+        mov EDIT_MODE, #0x80                     ; 75 29 80  0D61
         ret                                 ; 22  0D64
+;
+;==============================================================================
+; pos_digit (0x0D65) — POS direct entry: decimal accumulate into 0x6D:0x6E.
+;   value = value*10 + digit (MUL AB with B=#0x0A).
+;==============================================================================
 L_0D65:
         mov R6, A                           ; FE  0D65
         mov A, 0x6D                         ; E5 6D  0D66
@@ -581,6 +581,8 @@ L_0D8E:
         mov A, R3                           ; EB  0D94
         jb 0xE7, L_0DF2                     ; 20 E7 5A  0D95
         cjne A, #0x0D, L_0DA5               ; B4 0D 0A  0D98
+;
+;--- pos_commit (0x0D9B): R1 = R4+0x4F -> MOV @R1,0x6D at 0x0D9F ---
         mov A, R4                           ; EC  0D9B
         add A, #0x4F                        ; 24 4F  0D9C
         mov R1, A                           ; F9  0D9E
@@ -651,13 +653,13 @@ L_0DF4:
         acall 0x0FC4                        ; F1 C4  0E0A
         jc L_0E12                           ; 40 04  0E0C
         cpl A                               ; F4  0E0E
-        anl 0x47, A                         ; 52 47  0E0F
+        anl LED_LATCH, A                         ; 52 47  0E0F
         ret                                 ; 22  0E11
 L_0E12:
-        orl 0x47, A                         ; 42 47  0E12
+        orl LED_LATCH, A                         ; 42 47  0E12
         ret                                 ; 22  0E14
 L_0E15:
-        mov 0x29, #0x20                     ; 75 29 20  0E15
+        mov EDIT_MODE, #0x20                     ; 75 29 20  0E15
         jnb 0xE0, L_0E1F                    ; 30 E0 04  0E18
         dec R3                              ; 1B  0E1B
         xrl 0x6D, #0xFF                     ; 63 6D FF  0E1C
@@ -667,6 +669,11 @@ L_0E20:
         jb 0xE0, L_0E1F                     ; 20 E0 FC  0E20
         setb 0x44                           ; D2 44  0E23
         ret                                 ; 22  0E25
+;
+;==============================================================================
+; kh_jog (0x0E26) — axis jog: increment/decrement axis position by 1, clamp
+;   0x00..0xFF, then arm motion. +key = inc, -key = dec.
+;==============================================================================
 L_0E26:
         orl 0x20, #0x60                     ; 43 20 60  0E26
         jb 0xE0, L_0E33                     ; 20 E0 07  0E29
@@ -718,44 +725,44 @@ L_0E6D:
         jb 0xE7, L_0EBA                     ; 20 E7 43  0E74
         jnb 0xE6, L_0E81                    ; 30 E6 07  0E77
         jnb 0xE5, L_0EB6                    ; 30 E5 39  0E7A
-        mov 0x47, #0x27                     ; 75 47 27  0E7D
+        mov LED_LATCH, #0x27                     ; 75 47 27  0E7D
         ret                                 ; 22  0E80
 L_0E81:
         jb 0xE5, L_0E9D                     ; 20 E5 19  0E81
         cjne A, #0x1F, L_0E8B               ; B4 1F 04  0E84
-        mov 0x47, #0x4F                     ; 75 47 4F  0E87
+        mov LED_LATCH, #0x4F                     ; 75 47 4F  0E87
         ret                                 ; 22  0E8A
 L_0E8B:
         jnb 0xE4, L_0E99                    ; 30 E4 0B  0E8B
         jb 0xE3, L_0E95                     ; 20 E3 04  0E8E
-        mov 0x47, #0x1F                     ; 75 47 1F  0E91
+        mov LED_LATCH, #0x1F                     ; 75 47 1F  0E91
         ret                                 ; 22  0E94
 L_0E95:
-        mov 0x47, #0x3F                     ; 75 47 3F  0E95
+        mov LED_LATCH, #0x3F                     ; 75 47 3F  0E95
         ret                                 ; 22  0E98
 L_0E99:
-        mov 0x47, #0x2F                     ; 75 47 2F  0E99
+        mov LED_LATCH, #0x2F                     ; 75 47 2F  0E99
         ret                                 ; 22  0E9C
 L_0E9D:
         jb 0xE4, L_0EA4                     ; 20 E4 04  0E9D
-        mov 0x47, #0xF7                     ; 75 47 F7  0EA0
+        mov LED_LATCH, #0xF7                     ; 75 47 F7  0EA0
         ret                                 ; 22  0EA3
 L_0EA4:
         jb 0xE2, L_0EAC                     ; 20 E2 05  0EA4
-        mov 0x47, #0x6F                     ; 75 47 6F  0EA7
+        mov LED_LATCH, #0x6F                     ; 75 47 6F  0EA7
         sjmp L_0EAF                         ; 80 03  0EAA
 L_0EAC:
-        mov 0x47, #0x5F                     ; 75 47 5F  0EAC
+        mov LED_LATCH, #0x5F                     ; 75 47 5F  0EAC
 L_0EAF:
         jnb 0xE1, L_0EB5                    ; 30 E1 03  0EAF
-        anl 0x47, #0xF7                     ; 53 47 F7  0EB2
+        anl LED_LATCH, #0xF7                     ; 53 47 F7  0EB2
 L_0EB5:
         ret                                 ; 22  0EB5
 L_0EB6:
-        mov 0x47, #0x47                     ; 75 47 47  0EB6
+        mov LED_LATCH, #0x47                     ; 75 47 47  0EB6
         ret                                 ; 22  0EB9
 L_0EBA:
-        mov 0x47, #0x0F                     ; 75 47 0F  0EBA
+        mov LED_LATCH, #0x0F                     ; 75 47 0F  0EBA
         setb 0x50                           ; D2 50  0EBD
         ret                                 ; 22  0EBF
 L_0EC0:
@@ -779,7 +786,7 @@ L_0EE1:
         ret                                 ; 22  0EE6
 L_0EE7:
         setb 0x53                           ; D2 53  0EE7
-        mov 0x29, #0x40                     ; 75 29 40  0EE9
+        mov EDIT_MODE, #0x40                     ; 75 29 40  0EE9
         ret                                 ; 22  0EEC
 L_0EED:
         anl 0x28, #0x07                     ; 53 28 07  0EED
@@ -793,7 +800,7 @@ L_0EF9:
         ajmp 0x0C84                         ; 81 84  0EFE
 L_0F00:
         setb 0x54                           ; D2 54  0F00
-        mov 0x29, #0x40                     ; 75 29 40  0F02
+        mov EDIT_MODE, #0x40                     ; 75 29 40  0F02
         ajmp 0x0E6D                         ; C1 6D  0F05
 L_0F07:
         anl 0x28, #0x03                     ; 53 28 03  0F07
@@ -918,3 +925,4 @@ L_0FBE:
         sjmp L_0F8A                         ; 80 C6  0FC2
 L_0FC4:
         movc A, @A + PC                     ; 83  0FC4
+;--- reads bit_table at 0x0FC5 (see tables.asm) ---
