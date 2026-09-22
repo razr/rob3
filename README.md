@@ -14,13 +14,26 @@ potentiometric position feedback.
 
 What exists in this repository today:
 
-- **Annotated disassembly** of the initialization sequence (`0x0600–0x074C`) and
-  the teach-pendant keypad scanner (`0x0C00–`), byte-verified against the ROM.
-- **Two-layer verification** — a *golden byte-match* (assembled transcription
-  `cmp`'d against the ROM) plus *behavioral ucSim tests* (the real ROM run in
-  `s51` with runtime state asserted). Driven by `simulator/Makefile` (`make test`).
-- **Hardware reference docs** for every board IC, plus a compiled **ucSim
-  teach-pendant peripheral** (`cl_hw` module) for closer-to-real simulation.
+- **Assembling 1:1 annotated disassembly** — the entire 8 KB ROM reassembled
+  from 10 annotated `.asm` region files + 7 `inc/*.inc` equate files, with
+  output **byte-identical** to the original EPROM
+  (SHA-256 `1e94419d…`). Every instruction carries the raw bytes and a
+  provenance tag; `system.inc` is the authoritative IRAM/flag-bit map.
+- **Two-layer verification** — a *golden byte-match* (`make verify`: whole-image
+  `cmp` against the ROM) plus *behavioral ucSim tests* (the real ROM run in
+  `s51` with runtime state asserted). Driven by `simulator/Makefile`
+  (`make test`). All 10 regions pass standalone (`make status`).
+- **Reverse-engineered host serial protocol** — the RS-232 binary command set
+  confirmed against the ROM (hidden digital-input-read commands found), the
+  startup handshake (0x15/0xF1 reply semantics), and the stored-program
+  interpreter + a "hello world" program, all `[SIM]`-verified.
+- **Python ROS 2 driver** (`ros2/rob3_driver/`) — UR-driver-style package with
+  a ROS-independent protocol codec, serial+TCP transports, calibration, and a
+  driver node (JointState / FollowJointTrajectory / Trigger services). 25
+  pytest tests pass; driver bytes verified against the ROM dispatch in ucSim.
+- **Hardware reference docs** for every board IC, plus compiled **ucSim
+  peripheral modules** (`cl_hw`: teachbox, adc, loopback, rxd) for
+  closer-to-real simulation — including a pin-level auto-baud driver.
 - **Arduino bench bring-up rigs** that recreate the teachbox and a single robot
   axis to confirm hardware claims independently of the 8031.
 - **Domain skills & steering** under `.kiro/` capturing the MCS-51 / ucSim /
@@ -32,6 +45,29 @@ What exists in this repository today:
 > + documentation. The `mcs51-c-programming` skill and the charter capture the
 > intended approach for when that work begins.
 
+## Progress
+
+Chronological milestones. Each links to the dated session log with full detail,
+corrections, and provenance. Read the table for the overview; read a session log
+only when you need the specifics.
+
+| Date | Milestone | Detail |
+| :--- | :-------- | :----- |
+| 2026-07-14 | **Initial firmware analysis** — 5 subsystems, IRAM map, axis limits, IC complement identified from `main.asm` | [log](sessions/2026-07-14_firmware_analysis.md) |
+| 2026-09-03 | **Init sequence annotated** + byte-verified (assemble-and-diff, 140 bytes, 0 mismatches); vector table corrected; serial ISR located at 0x0300 | [log](sessions/2026-09-03_annotate_init_sequence.md) |
+| 2026-09-11 | **Hardware docs fixed** (74HC373, ADC0808, 74LS138 decode), **Arduino bring-ups** (teachbox + motors), **teachbox annotation** (kbd_scan/axis-select/jog), first **ucSim cl_hw module** (teachbox) | [log](sessions/2026-09-11_hardware_docs_arduino_teachbox_ucsim.md) |
+| 2026-09-12 | **POS-digit direct entry** verified (decimal accumulate → axis slot); **simulator restructured** to top-level `simulator/`; **cl_adc** (EOC→INT1 free-run); **plant/bridge architecture** settled; **Teachbox GUI + CLI** | [log](sessions/2026-09-12_simulator_restructure_adc_plant_gui.md), [log](sessions/2026-09-12_teachbox_pos_digit_entry.md) |
+| 2026-09-13 | **CLI UX**: configurable ROM, readline history, **ucSim console socket** (`-z <port>` + `nc` attach) | [log](sessions/2026-09-13_teachbox_cli_ux_console_socket.md) |
+| 2026-09-14 | **Teachbox sim unblocked**: `run N`→`step N` (20 s→30 ms); **EMERGENCY-OFF** (P3.2) + **P3.4 poll gate** diagnosed; **loopback cl_hw module**; **keypad debounce** (release-then-hold); **ucSim bugs** filed (#001 pipelined-cmd, #002 @-filename segfault — submitted+closed upstream) | [log](sessions/2026-09-14_teachbox_sim_gates_loopback_ucsim_bug.md), [log](sessions/2026-09-14_ucsim_issue_002_at_filename_issues_relocate.md) |
+| 2026-09-14 | **ucSim plugin SDK** made installable (`make install`); ROB3 modules converted to **loadable `.so` plugins** (`loadhw`) | [log](sessions/2026-09-14_ucsim_plugin_sdk_install_rob3_loadable_modules.md) |
+| 2026-09-14 | **EXT1 axis servo** annotated; axis limits/calibration investigated (no per-axis clamp in ROM) | [log](sessions/2026-09-14_ext1_axis_limits_calibration_analysis.md) |
+| 2026-09-16 | **Symbolic equates** (`rob3.inc`) applied to annotated files; EXT1 extracted to own file; **RS-232 shorting connector** traced (pin-4 pull-up hypothesis) | [log](sessions/2026-09-16_annotated_asm_symbolic_equates_header.md), [log](sessions/2026-09-16_ext1_axis_servo_extract_annotate_calibration.md), [log](sessions/2026-09-16_rs232_shorting_connector_trace_loopback_docs.md) |
+| 2026-09-20 | **RS-232 UART annotated** + protocol `[SIM]`-proven; **rxd cl_hw pin-driver** built (auto-baud end-to-end); fixed-baud path has no serial (ES never set); 115200 out of auto-baud range | [log](sessions/2026-09-20_rs232_annotation_protocol_sim_rxd_driver.md) |
+| 2026-09-20 | **Full command set confirmed** vs ROM; **hidden commands** found (digital-input read 0x50–0x57); 0xFx replies are ACK/status not errors; **stored-program interpreter** annotated + **"hello world" program** runs | [log](sessions/2026-09-20_command_set_hidden_cmds_program_interpreter_hello_world.md) |
+| 2026-09-20 | **Python ROS 2 driver** (UR-style): protocol codec, serial+TCP transports, calibration, driver node, URDF; 25 pytest tests; driver bytes verified against ROM in ucSim | [log](sessions/2026-09-20_ros2_driver_rs232.md) |
+| 2026-09-22 | **Annotated source tree redesigned**: 10 region `.asm` + 7 `inc/*.inc` + `rob3.asm` top unit; old `.a51`/`gen_init.py` removed; **whole 8 KB image assembles 1:1** with the ROM (disasm51 + `d51_to_sdas.py` converter) | [log](sessions/2026-09-22_annotated_dir_redesign_assembling_1to1.md) |
+| 2026-09-22 | **All 10 regions annotated** — section banners, symbolic operands, MOVC data tables marked, 0xFF padding collapsed; all regions pass standalone verify | [log](sessions/2026-09-22_annotate_all_regions_per_instruction.md) |
+
 ## Repository layout
 
 ```
@@ -41,15 +77,15 @@ rob3/
 ├── LICENSE
 ├── firmware/                         # the firmware itself (ROM + disassembly + annotations)
 │   ├── bin/ hex/                      #   ROM image (binary + Intel HEX)
-│   ├── src/                           #   raw disasm (main.asm) + annotated/ (assembling 1:1 source: *.asm + inc/*.inc)
+│   ├── src/                           #   raw disasm (main.asm) + annotated/ (assembling 1:1: rob3.asm + *.asm + inc/*.inc + Makefile)
 │   ├── INSTALL.md                     #   toolchain prerequisites
-├── simulator/                        # build / verify / simulate rig (drives ../firmware)
-│   ├── Makefile                       #   verify / sim-* / gen targets
+├── simulator/                        # behavioral-test rig (drives ../firmware)
+│   ├── Makefile                       #   sim-* targets; verify delegates to firmware/src/annotated
 │   ├── BUILD.md                       #   build/test guide
-│   ├── *.a51                           #   byte-exact ROM-region sources (golden DUT)
 │   ├── tests/                          #   ucSim behavioral tests
-│   ├── harness/                        #   Python batch driver + closed-loop foundation
-│   ├── ucsim-modules/                  #   compiled cl_hw peripherals (teachbox/, adc/)
+│   ├── harness/                        #   Python batch driver + Teachbox GUI/CLI + plant
+│   ├── ucsim-modules/                  #   compiled cl_hw peripherals (teachbox/ adc/ loopback/ rxd/)
+├── ros2/rob3_driver/                 # Python ROS 2 driver (UR-style, RS-232)
 ├── hardware/                         # board reverse-engineering
 │   ├── board/                         #   per-chip docs (8031, 8255, 74LS138, EPROM, SRAM, ADC, L293, ...)
 │   ├── teachbox/  motors/  connectors/#   subsystem docs + Arduino bring-up sketches
