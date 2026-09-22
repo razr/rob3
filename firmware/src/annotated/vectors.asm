@@ -97,19 +97,19 @@
 
         .org    0x0000
 reset_vector:
-        ljmp    init_start          ; 02 06 00  RESET -> init_start (init.asm)  [BYTE]
+        ljmp    0x0600              ; 02 06 00  RESET -> init_start (init.asm)  [BYTE]
 
         .org    0x0003
 ext_int0_vector:
-        ljmp    emergency_off       ; 02 00 40  EXT0 -> EMERGENCY-OFF (ext0_estop.asm) [BYTE]
+        ljmp    0x0040              ; 02 00 40  EXT0 -> emergency_off (ext0_estop.asm) [BYTE]
 
         .org    0x000B
 timer0_vector:
-        ljmp    timer0_isr          ; 02 00 80  Timer 0 system tick (timer0_tick.asm) [BYTE]
+        ljmp    0x0080              ; 02 00 80  Timer 0 -> timer0_isr (timer0_tick.asm) [BYTE]
 
         .org    0x0013
 ext_int1_vector:
-        ljmp    0x00C0              ; 02 00 C0  EXT1 axis servo ISR (ext1_servo.asm) [BYTE]
+        ljmp    0x00C0              ; 02 00 C0  EXT1 -> isr_ext1 (ext1_servo.asm) [BYTE]
 
 ;       0x001B  TIMER1 vector: 0xFF padding (objcopy fill). Timer 1 is only the
 ;       UART baud generator; its interrupt (ET1) is NEVER enabled. [BYTE]

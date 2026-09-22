@@ -106,7 +106,8 @@ verify-region: | $(BUILD) ## Verify ONE region: make verify-region REGION=<name>
 	printf '        .include "%s"\n' "$$PWD/$(REGION).asm" >> $(BUILD)/_r_$(REGION).asm; \
 	$(AS) -l -s -o $(BUILD)/_r_$(REGION).rel $(BUILD)/_r_$(REGION).asm || exit 1; \
 	$(LD) -i -m $(BUILD)/_r_$(REGION).ihx $(BUILD)/_r_$(REGION).rel || exit 1; \
-	$(OBJCOPY) -I ihex -O binary --gap-fill=0xFF $(BUILD)/_r_$(REGION).ihx $(BUILD)/_r_$(REGION).full; \
+	$(OBJCOPY) -I ihex -O binary --gap-fill=0xFF --pad-to=$$((orgd + lend)) \
+	  $(BUILD)/_r_$(REGION).ihx $(BUILD)/_r_$(REGION).full; \
 	dd if=$(BUILD)/_r_$(REGION).full of=$(BUILD)/_r_$(REGION).bin bs=1 count=$$lend status=none; \
 	dd if="$(ROM)" of=$(BUILD)/_rom_$(REGION).bin bs=1 skip=$$orgd count=$$lend status=none; \
 	if cmp -s $(BUILD)/_r_$(REGION).bin $(BUILD)/_rom_$(REGION).bin; then \
