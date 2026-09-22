@@ -41,7 +41,7 @@ rob3/
 ├── LICENSE
 ├── firmware/                         # the firmware itself (ROM + disassembly + annotations)
 │   ├── bin/ hex/                      #   ROM image (binary + Intel HEX)
-│   ├── src/                           #   raw disasm (main.asm) + annotated/ (*.annotated.asm)
+│   ├── src/                           #   raw disasm (main.asm) + annotated/ (assembling 1:1 source: *.asm + inc/*.inc)
 │   ├── INSTALL.md                     #   toolchain prerequisites
 ├── simulator/                        # build / verify / simulate rig (drives ../firmware)
 │   ├── Makefile                       #   verify / sim-* / gen targets

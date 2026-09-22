@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Behavioral test: run the REAL ROM's Teachbox keypad scanner (kbd_scan, entry
 # 0x0C00) in ucSim and assert it decodes the column-group bits into the key
-# index bases documented in src/annotated/teachbox.annotated.asm and
+# index bases documented in src/annotated/teachbox.asm and
 # hardware/teachbox/board.md.
 #
 # The scanner strobes matrix rows via the 8255 (unmodeled here) and reads the
@@ -122,7 +122,7 @@ check_jog 0x00 0x01 00 "- clamps at 0x00"
 #        low byte in iram 0x6D. Typing 1,2,8 must build 0x6D: 1 -> 12 -> 128.
 #    (b) COMMIT (0x0D9B..0x0DA1): R1 = 0x4F + R4, then MOV @R1,0x6D writes the
 #        accumulated value into the axis position slot (axis = R4-2, R4=2->0x51).
-#    Both verified in src/annotated/teachbox.annotated.asm.
+#    Both verified in src/annotated/teachbox.asm.
 # ---------------------------------------------------------------------------
 # Feed one digit: PC=0x0D65 with ACC=digit (0x0D65 MOV R6,A), high byte 0x6E=0,
 # B(0xF0)=0; run to the store RET/branch (0x0D77 single-byte, 0x0D7B two-digit).

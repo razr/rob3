@@ -18,15 +18,17 @@ metadata:
 
 ## Two-layer verification model (a robust way to prove firmware)
 
-1. **Golden byte-match**: assemble a byte-exact `.a51` transcription and `cmp`
-   it against the ROM slice. Proves *the listing matches the image*. Print the
-   matching SHA-256 hashes as evidence.
+1. **Golden byte-match**: assemble the annotated source and `cmp` the result
+   against the ROM. Proves *the listing matches the image*. Print the matching
+   SHA-256 hashes as evidence. (Either transcribe a region byte-exact, or
+   disassemble the ROM — e.g. with `disasm51` — and convert to assemblable
+   source; the emitted bytes are what must match, not the source text.)
 2. **Behavioral simulation**: run the **real ROM** in `s51` and assert runtime
    state (SFRs, IRAM, XDATA) against the annotation. Proves *the firmware
    behaves as documented*.
 
-Keep both green. If you edit an annotated region, regenerate the `.a51` so the
-golden test still matches the ROM bytes.
+Keep both green. If you edit an annotated region, re-assemble and `cmp` so the
+golden test still matches the ROM bytes; never claim 1:1 until `cmp` proves it.
 
 ## Launch the simulator
 

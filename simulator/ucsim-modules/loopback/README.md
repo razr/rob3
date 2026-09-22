@@ -39,7 +39,7 @@ permanent emergency-off: INT0 (level-triggered, enabled via `IE=0x17`) keeps
 vectoring to `0x0040`, whose `JNB P3.2, 0x0052` spin never falls through, and
 the main-loop teachbox poll (`tb_poll`, `0x07C4`) is never reached. See the
 "THREE GATES" note on the main loop in
-`firmware/src/annotated/main.annotated.asm` and the `rob3-lessons-learned`
+`firmware/src/annotated/main.asm` and the `rob3-lessons-learned`
 entry.
 
 ## What it does

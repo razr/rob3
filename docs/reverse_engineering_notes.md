@@ -32,9 +32,9 @@
 | 0x0BFF-0x0C64 | Keyboard/teach pendant scanner |
 | 0x0C7F-0x0FDE | Teach pendant command handler / editor |
 
-> Vector targets verified from ROM bytes (see `firmware/src/annotated/main.annotated.asm`).
+> Vector targets verified from ROM bytes (see `firmware/src/annotated/` (init.asm, main.asm)).
 > The program interpreter (0x0803 / 0x0941 / 0x0A33) is annotated in
-> `firmware/src/annotated/program_interpreter.annotated.asm` — stored programs
+> `firmware/src/annotated/program.asm` — stored programs
 > reuse the RS-232 command bit-field encoding; opcode 0x1F = MARK (label), 0x36 =
 > a 3-byte instruction; most instructions occupy an 8-byte slot. Verified in
 > `simulator/tests/sim_program.sh`.

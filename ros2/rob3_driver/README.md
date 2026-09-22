@@ -7,7 +7,7 @@ Universal Robots ROS 2 driver (a serial protocol client + a hardware/driver node
 
 The wire protocol is the ROB3 low-level protocol, reverse-engineered and
 verified against the ROM/simulator (see `../hardware/host/command.md` and
-`../firmware/src/annotated/rs232_serial.annotated.asm`). The driver speaks the
+`../firmware/src/annotated/rs232.asm`). The driver speaks the
 same bytes to either **real hardware** (`/dev/ttyUSB0`) or the **ucSim
 simulator** (via its `-S` UART socket), so it can be developed without the robot.
 

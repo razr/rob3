@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Behavioral test: run the REAL ROM init in ucSim (s51) and assert that its
-# runtime behavior matches firmware/src/annotated/main.annotated.asm.
+# runtime behavior matches firmware/src/annotated/init.asm.
 #
 # The init deliberately blocks at 0x0680 (JB 0x22.0) waiting for the EXT1
 # (axis-servo) ISR, which only fires on the ADC's EOC -> INT1. With no ADC

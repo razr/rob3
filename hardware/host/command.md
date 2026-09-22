@@ -11,7 +11,7 @@ For all responses, the robot always returns the **command byte**.
 > **Confirmed against the ROM firmware [SIM].** Every command family below was
 > verified by driving the header byte through the real 8031 command dispatch in
 > ucSim and observing the resulting state (see the confirmation table at the end
-> of this file, `firmware/src/annotated/rs232_serial.annotated.asm`, and
+> of this file, `firmware/src/annotated/rs232.asm`, and
 > `simulator/tests/sim_serial.sh`). The command byte is decoded from its bit
 > fields; the frame's trailing `0x03` (ETX) is checked by the firmware
 > (`cjne A,#0x03` at 0x03AE) before the header is acted on — a malformed frame
@@ -297,7 +297,7 @@ The stored-program instruction encoding decoded by these routines is **[INFER]**
 Each command header was driven through the real 8031 dispatch (entry
 `rx_dispatch` at `0x03A9`, header in R6, frame terminated with ETX `0x03`) in
 ucSim, and the resulting IRAM/response state observed. Firmware landmarks are in
-`firmware/src/annotated/rs232_serial.annotated.asm`.
+`firmware/src/annotated/rs232.asm`.
 
 | Command | Documented meaning | ROM-observed effect | Firmware path |
 |:--------|:-------------------|:--------------------|:--------------|

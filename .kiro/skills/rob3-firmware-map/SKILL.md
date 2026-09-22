@@ -21,7 +21,8 @@ metadata:
 > see `rob3-hardware`. Authoritative live docs:
 > `docs/reverse_engineering_notes.md`, `docs/axis_state_machine.md`,
 > `docs/8031_sfr_map.md`, `docs/8255_mapping.md`, and the annotated listings
-> `firmware/src/annotated/*.annotated.asm`. This skill is the fast index; the docs are the
+> `firmware/src/annotated/*.asm` (one file per functional region, assembled by
+> `rob3.asm` into a 1:1 image). This skill is the fast index; the docs are the
 > detail.
 
 ## Provenance convention (apply to EVERY firmware claim)
@@ -89,6 +90,12 @@ Register banks: 0 = main (`0x00`), 1 = ISRs INT0/INT1 (`0x08`), 2 = serial ISR
 > Byte-vs-bit reminder: e.g. the init gate `JB 0x22.0` tests **bit 0 of the
 > one-hot axis mask byte 0x22**, not RAM byte 0x22 as a whole.
 
+> **Machine-readable equates:** this whole map + every documented flag bit is
+> mirrored as sdas8051 symbols in `firmware/src/annotated/inc/` — `system.inc`
+> is the authoritative IRAM map + the shared 0x20/0x23/0x28 flag bits; the
+> per-subsystem bytes live in `servo.inc` / `teachbox.inc` / `serial.inc` /
+> `program.inc`, SFRs in `sfr.inc`, MOVX windows in `devices.inc`.
+
 ## External MOVX device windows (DPH selects) [HW]
 
 | DPH | Device |
@@ -132,7 +139,7 @@ ADC0808/0809**, EOC → INT1 — *not* a quadrature encoder. [HW]
    bytes, NOT errors** (0xF3 default ACK, 0xF4 system ACK, 0xF6/0xF2 program
    status, 0xF7 motion-complete); there is no distinct NAK byte. `0x81` =
    program-upload block marker (streams to SRAM). See
-   `firmware/src/annotated/rs232_serial.annotated.asm`.
+   `firmware/src/annotated/rs232.asm`.
 3. **Teach-pendant editor** (scanner `0x0C00`, handler `0x0C80`) — scans the 5×5
    matrix (strobe via 8255, read columns on **P1/0x90**), debounces, returns a
    key index; the handler does axis jog, program edit, run/stop, position teach,
@@ -158,7 +165,7 @@ ADC0808/0809**, EOC → INT1 — *not* a quadrature encoder. [HW]
    end-marker at 0x80EE.., pages **0x81..0x9F** = program body (~7.9 KB of the
    8 KB HM6264, nonvolatile). Stored programs reuse the serial command encoding
    and are the SAME programs the Teachbox creates. Per-opcode operand layout is
-   partly [INFER]. See `firmware/src/annotated/program_interpreter.annotated.asm`
+   partly [INFER]. See `firmware/src/annotated/program.asm`
    and the `demo-hello-program` test.
 5. **Motion executor** (`0x08FF`, called from the main loop) — high-level:
    detects all-axes-done / timeout / I/O conditions, drives program stepping

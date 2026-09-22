@@ -10,7 +10,7 @@
 #      path is taken (MOV IE,#0x07 ; AJMP init_finish), avoiding the serial
 #      auto-detect loop that waits on a live P3.0 edge.
 #
-# Expected end state (matches firmware/src/annotated/main.annotated.asm):
+# Expected end state (matches firmware/src/annotated/init.asm):
 #   - execution reaches the final init instruction 0x074B (SETB EA), i.e. the
 #     main-loop entry 0x074D is next (0x074B chosen as the completion marker
 #     because SETB EA then immediately vectors to a pending ISR)

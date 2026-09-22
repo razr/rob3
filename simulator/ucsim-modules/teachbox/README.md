@@ -72,7 +72,7 @@ printf 'set hardware teachbox 1 1\nreset\npc 0x0c00\nset mem iram 0x47 0x00\nset
   | ucsim_51 -t 51 -X 11.0592M /tmp/rob3.hex     # -> 0x46 = 0x10 (row 1)
 ```
 
-See also `../../../firmware/src/annotated/teachbox.annotated.asm`,
+See also `../../../firmware/src/annotated/teachbox.asm`,
 `../../tests/sim_teachbox_module.sh` (module end-to-end), and
 `../../tests/sim_teachbox.sh` (P1-injection scanner/handler decode).
 

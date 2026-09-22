@@ -3,7 +3,7 @@
 Every command here is the Eurobtec ROB3 low-level protocol, reverse-engineered
 and verified against the ROM/simulator. References:
   - hardware/host/command.md              (the protocol, ROM-confirmed [SIM])
-  - firmware/src/annotated/rs232_serial.annotated.asm  (the dispatch)
+  - firmware/src/annotated/rs232.asm  (the dispatch)
 
 Frame model (verified):
   * Startup handshake: host sends 0x20 (SPACE) after RESET; robot replies 0x15

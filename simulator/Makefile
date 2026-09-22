@@ -1,18 +1,16 @@
-# ROB3 firmware — assemble & verify the annotated ROM regions
+# ROB3 firmware — behavioral simulation tests (ucSim)
 #
-# Toolchain (SDCC suite + ucSim):
-#   sdas8051   assembler   (.a51 -> .rel)
-#   sdld       linker      (.rel -> .ihx)
-#   objcopy    ihex->bin   (binutils)
+# Toolchain (ucSim + optional loader build):
 #   s51        8051 sim    (ucSim) for behavioral tests
+#   ucsim_51   loader-enabled sim with the cl_hw modules (opt-in tests)
 #
-# Each annotated region is a BYTE-EXACT transcription of the real ROM. The
-# golden tests prove the assembled bytes equal the ROM; the sim tests prove the
-# runtime behavior matches the annotated .asm files.
+# The behavioral tests run the REAL ROM image in ucSim and assert runtime state
+# matches the annotated .asm files under ../firmware/src/annotated/.
 #
-# Regions:
-#   init      0x0600..0x074C  -> ../firmware/src/annotated/main.annotated.asm
-#   teachbox  0x0C00..0x0C6B  -> ../firmware/src/annotated/teachbox.annotated.asm (keypad scanner)
+# The GOLDEN byte-match (assembled source == ROM) now lives with the annotated
+# source itself: ../firmware/src/annotated/ (make verify there builds the whole
+# 8 KB image and cmp's it against the ROM). This Makefile's `verify` target
+# delegates to it, so `make test` still covers golden + behavioral.
 #
 # This Makefile lives in the top-level simulator/ directory. The firmware
 # artifacts (ROM image + annotated sources) live in ../firmware/; the
@@ -24,34 +22,20 @@ BIN        := $(FWDIR)/bin/M2764A@DIP28.BIN
 HEX        := $(FWDIR)/hex/M2764A@DIP28.HEX
 SIMDIR     := .
 BUILD      := $(SIMDIR)/build
-
-# Init region (reset init: 0x0600 .. 0x074C inclusive)
-INIT_SRC   := $(SIMDIR)/init.a51
-INIT_ORG   := 0x0600
-INIT_LEN   := 333            # 0x074D - 0x0600
-INIT_SKIP  := 1536           # 0x0600 in decimal
-
-# Teachbox keypad scanner region (0x0C00 .. 0x0C6B inclusive)
-TB_SRC     := $(SIMDIR)/teachbox_scan.a51
-TB_ORG     := 0x0C00
-TB_LEN     := 108            # 0x0C6C - 0x0C00
-TB_SKIP    := 3072           # 0x0C00 in decimal
+ANNDIR     := $(FWDIR)/src/annotated
 
 # ---- Tools -------------------------------------------------------------------
-AS         := sdas8051
-LD         := sdld
-OBJCOPY    := objcopy
 SIM        := s51
 SIMFLAGS   := -t 51 -X 11.0592M
 
 # A hex copy with a shell-safe name (the shipped .hex has an '@' in its name)
 SAFEHEX    := $(BUILD)/rob3.hex
 
-.PHONY: all verify verify-init verify-teachbox \
+.PHONY: all verify \
         sim-init sim-run sim-teachbox sim-teachbox-module sim-adc sim-serial \
-        sim-serial-autobaud sim-serial-e2e sim-program sim-teachbox-axis demo-teachbox demo-hello-program test gen clean help
+        sim-serial-autobaud sim-serial-e2e sim-program sim-teachbox-axis demo-teachbox demo-hello-program test clean help
 
-all: verify ## Default: assemble all regions and prove they match the ROM
+all: test ## Default: run all tests (golden + behavioral)
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -60,34 +44,9 @@ help: ## List targets
 $(BUILD):
 	@mkdir -p $(BUILD)
 
-# ---- Generic assemble+link+bin+golden ----------------------------------------
-# $(1)=name  $(2)=src .a51  $(3)=org  $(4)=len(bytes)  $(5)=skip(dec)
-define GOLDEN_template
-$$(BUILD)/$(1).bin: $(2) | $$(BUILD)
-	$$(AS) -o -l -s $$(BUILD)/$(1).rel $(2)
-	$$(LD) -i -m -b CODE=$(3) $$(BUILD)/$(1).ihx $$(BUILD)/$(1).rel
-	$$(OBJCOPY) -I ihex -O binary $$(BUILD)/$(1).ihx $$(BUILD)/$(1).bin
-
-$$(BUILD)/rom_$(1).bin: $$(BIN) | $$(BUILD)
-	dd if="$$(BIN)" of=$$(BUILD)/rom_$(1).bin bs=1 skip=$(5) count=$(4) status=none
-
-verify-$(1): $$(BUILD)/$(1).bin $$(BUILD)/rom_$(1).bin
-	@if cmp -s $$(BUILD)/$(1).bin $$(BUILD)/rom_$(1).bin; then \
-		echo "PASS  golden[$(1)]: assembled == ROM[$(3)..] ($(4) bytes)"; \
-		sha256sum $$(BUILD)/$(1).bin $$(BUILD)/rom_$(1).bin; \
-	else \
-		echo "FAIL  golden[$(1)]: assembled differs from ROM"; \
-		cmp $$(BUILD)/$(1).bin $$(BUILD)/rom_$(1).bin || true; \
-		exit 1; \
-	fi
-endef
-
-$(eval $(call GOLDEN_template,init,$(INIT_SRC),$(INIT_ORG),$(INIT_LEN),$(INIT_SKIP)))
-$(eval $(call GOLDEN_template,teachbox,$(TB_SRC),$(TB_ORG),$(TB_LEN),$(TB_SKIP)))
-
-verify: verify-init verify-teachbox ## GOLDEN: all regions must equal the ROM
-
-# ---- Simulator plumbing ------------------------------------------------------
+# ---- Golden byte-match (delegated to the annotated source tree) --------------
+verify: ## GOLDEN: assembled annotated source == ROM (runs make -C ../firmware/src/annotated verify)
+	@$(MAKE) -C $(ANNDIR) verify
 $(SAFEHEX): $(HEX) | $(BUILD)
 	cp "$(HEX)" $(SAFEHEX)
 
@@ -141,14 +100,6 @@ demo-hello-program: $(SAFEHEX) ## Demo: hand-assemble a "hello world" program, l
 # ---- Aggregate ---------------------------------------------------------------
 test: verify sim-init sim-run sim-serial sim-program sim-serial-autobaud sim-serial-e2e sim-teachbox sim-teachbox-module sim-adc sim-teachbox-axis ## Run all tests (golden + behavioral)
 	@echo "ALL TESTS PASSED"
-
-# ---- Regenerate the byte-exact sources from the ROM --------------------------
-gen: ## Regenerate the .a51 region sources from the ROM (byte-exact)
-	@python3 $(SIMDIR)/gen_init.py "$(BIN)" $(INIT_SRC) $(INIT_ORG) $(INIT_LEN) \
-		init_start $(FWDIR)/src/annotated/main.annotated.asm
-	@python3 $(SIMDIR)/gen_init.py "$(BIN)" $(TB_SRC) $(TB_ORG) $(TB_LEN) \
-		kbd_scan_region $(FWDIR)/src/annotated/teachbox.annotated.asm
-	@echo "regenerated $(INIT_SRC) and $(TB_SRC)"
 
 clean: ## Remove build artifacts
 	rm -rf $(BUILD)

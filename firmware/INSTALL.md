@@ -1,22 +1,32 @@
 # INSTALL
 
-Toolchain prerequisites for assembling and simulating the ROB3 firmware init
-sequence (see [`../simulator/BUILD.md`](../simulator/BUILD.md) for how to
-actually build and test).
+Toolchain prerequisites for assembling and simulating the ROB3 firmware
+(see [`../simulator/BUILD.md`](../simulator/BUILD.md) for how to actually build
+and test).
 
 ## What you need
 
 | Tool | Provides | Used for |
 | :--- | :------- | :------- |
-| `sdas8051` | SDCC 8051 assembler | assemble `simulator/init.a51` |
+| `sdas8051` | SDCC 8051 assembler | assemble the annotated source (`firmware/src/annotated/`) |
 | `sdld` | SDCC linker (ASlink) | link `.rel` → Intel HEX |
 | `objcopy` | GNU binutils | Intel HEX → raw binary |
 | `s51` | ucSim 8051 simulator | run the ROM, behavioral tests |
 | `make` | GNU Make | drive the build/test targets |
-| `python3` | Python 3 | regenerate `simulator/init.a51` (`make gen`) |
 
 `sdas8051` and `sdld` ship in the **sdcc** package; `s51` ships in the
 **ucsim** package.
+
+### Optional (only to regenerate an annotated region from the ROM)
+
+| Tool | Provides | Used for |
+| :--- | :------- | :------- |
+| `disasm51` | 8051 disassembler (PyPI) | re-disassemble the ROM; drives `d51_to_sdas.py` |
+
+Install in a venv (the environment is externally-managed):
+`python3 -m venv /tmp/d51venv && /tmp/d51venv/bin/pip install disasm51`.
+Not needed for a normal `make verify` / `make test` — the annotated `.asm`
+regions are already committed and assemble as-is.
 
 ## Verified environment
 

@@ -25,7 +25,7 @@
  *
  *   In ucSim an undriven input pin reads LOW, so without help the ROM traps in
  *   the emergency-off spin and never polls the keypad (see the annotated
- *   main-loop "THREE GATES" note in firmware/src/annotated/main.annotated.asm,
+ *   main-loop "THREE GATES" note in firmware/src/annotated/main.asm,
  *   and rob3-lessons-learned). This module reproduces the "connector present"
  *   pin state by driving the conditioned P3 bits HIGH on read.
  *

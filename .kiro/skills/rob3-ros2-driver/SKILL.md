@@ -19,7 +19,7 @@ metadata:
 
 > Package: `ros2/rob3_driver/` (ament_python). Talks the ROB3 low-level protocol
 > — reverse-engineered and [SIM]-verified in `hardware/host/command.md` and
-> `firmware/src/annotated/rs232_serial.annotated.asm` — over RS-232 to the 8031,
+> `firmware/src/annotated/rs232.asm` — over RS-232 to the 8031,
 > or over ucSim's `-S` UART socket for development. Modelled on the UR ROS 2
 > driver but in Python. For the protocol itself see the `rob3-firmware-map` /
 > `rob3-firmware-sim` skills.

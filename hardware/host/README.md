@@ -3,7 +3,7 @@
 How a PC host talks to the ROB3 over the DB9 RS-232 link: the wire settings, the
 software auto-baud training, the reset handshake, and example commands. Bench-
 verified against a real board. See also the firmware side in
-`firmware/src/annotated/rs232_serial.annotated.asm`.
+`firmware/src/annotated/rs232.asm`.
 
 ## Auto-Baud Rate Detection
 

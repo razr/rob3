@@ -6,7 +6,7 @@
 #     MOVE axis 1 to position 0x40
 #     END
 # We hand-assemble it using the verified instruction encoding (see
-# firmware/src/annotated/program_interpreter.annotated.asm), load the bytes into
+# firmware/src/annotated/program.asm), load the bytes into
 # external SRAM (the program store, page 0x81 = 0x8100), point the program
 # counter at it, and drive the executor (prog_exec, 0x0941) instruction by
 # instruction — asserting each move lands in the axis target table and the END

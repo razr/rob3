@@ -172,7 +172,9 @@ objcopy -I ihex -O binary out.ihx out.bin
 
 ## When to use this skill
 
-- Reading or annotating `*.asm` / `*.annotated.asm` 8051/8031 listings.
-- Writing new 8031 assembly or byte-exact `.a51` transcriptions.
+- Reading or annotating `*.asm` 8051/8031 listings (disasm51 or sdas8051 syntax).
+- Writing new 8031 assembly or byte-exact transcriptions for the golden build.
+- Using **disasm51** (`pip install disasm51`) to disassemble a ROM binary, or
+  `d51_to_sdas.py` to convert its output to sdas8051-assemblable source.
 - Diagnosing bit-vs-byte, bank-switch, or MOVX device-select bugs.
 - Setting up timers, UART, or interrupt vectors on the 8051/8031.

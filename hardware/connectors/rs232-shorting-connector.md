@@ -52,7 +52,7 @@ corresponding P3 gate LOW.
 ## The two firmware gates  [SIM][BYTE]
 
 The firmware only reaches the Teachbox poll (`tb_poll`, 0x07C4) when two Port-3
-inputs are the right level (see `../../firmware/src/annotated/main.annotated.asm`
+inputs are the right level (see `../../firmware/src/annotated/main.asm`
 and `../../simulator/ucsim-modules/loopback/README.md`):
 
 1. **P3.2 / INT0 = EMERGENCY-OFF**, active LOW → must be **HIGH** to run.

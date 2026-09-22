@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Behavioral test: the ROB3 stored-PROGRAM interpreter (annotated in
-# firmware/src/annotated/program_interpreter.annotated.asm).
+# firmware/src/annotated/program.asm).
 #
 # Crafts instruction bytes in external SRAM (page 0x81 = 0x8100), points the
 # program counter (IRAM 0x66:0x67) at them, enters the executor prog_exec

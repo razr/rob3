@@ -27,7 +27,7 @@ Travel within the working range of each of the ROB3i's six axes is divided into 
 > **ROB3i** (newer model) documentation. The **original ROB3** firmware in this
 > repository works in **8-bit position values (0..255)** — its axis target and
 > feedback bytes are single bytes (see
-> `../../firmware/src/annotated/ext1_axis_servo.annotated.asm`). So on a ROB3,
+> `../../firmware/src/annotated/ext1_servo.asm`). So on a ROB3,
 > read these 0..511 ranges as the ROB3i's higher-resolution scale, not as the
 > range this ROM uses.
 

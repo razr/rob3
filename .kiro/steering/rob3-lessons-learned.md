@@ -85,7 +85,7 @@ straight into 0x0003 → 0x0040 and loops in 0x0047..0x0054.
   P3 *latch*, not necessarily the input pin in this build — verify with a PC
   trace that execution actually leaves 0x0040 and reaches 0x07C4. The
   emergency-off handler is annotated at `emergency_off` (0x0040) in
-  `firmware/src/annotated/main.annotated.asm`.
+  `firmware/src/annotated/` (init.asm, main.asm).
 - **Root cause (HW):** P3.2 (and P3.4/poll-gate, P3.0/baud) are conditioned by
   **MM74C04N #1**; the board needs the **RS-232 shorting connector** installed
   for these to sit HIGH (hardware/teachbox/README.md, board/MM74C04N.md). The
@@ -144,6 +144,29 @@ byte off the real entry (0xFF padding decoded as `MOV R7,A` shifts boundaries).
 Verified truths: reset is `LJMP 0x0600` (not "jump_05FF"); the keypad scanner is
 entered at **0x0C00** (0x0BFF is padding); the key handler at **0x0C80**
 (0x0C7F is padding). Confirm entry addresses from the ROM bytes, not the labels.
+
+### disasm51 dialect ≠ sdas8051 — convert before assembling the annotated source
+`firmware/src/main.asm` is [disasm51](https://github.com/OlekMazur/disasm51)
+output; the assembling 1:1 tree in `firmware/src/annotated/` uses **sdas8051**,
+which does NOT accept disasm51 syntax: `NNh` hex → `0xNN`; bit dot-notation
+`28h.7`/`0x22.0` → the **numeric bit address** (e.g. `0x47`, `0x10`); bare `org`
+→ `.org`; `$` self-ref → `.`; `jump_XXXX` labels → local labels or numeric.
+`firmware/src/annotated/d51_to_sdas.py` does this conversion using disasm51's own
+instruction decoder (`disasm51.instructions`), emitting per-instruction bytes so
+the output `cmp`s byte-exact. Install disasm51 in a venv (env is
+externally-managed): `python3 -m venv … && …/pip install disasm51`.
+
+### Region boundaries: some code runs PAST the obvious end (don't truncate)
+When slicing the ROM into per-region assembling files, two blocks extend beyond
+the "obvious" handler end and are easy to cut short — the whole-image `cmp` then
+fails at the first missing byte:
+- **RS-232** is `0x0203..0x0587` (901 B): the UART ISR/dispatch end ~0x052F but
+  the **TX helper** continues to **0x0587** (after a short 0xFF gap at
+  0x0530..0x053A). [BYTE]
+- **Program interpreter** starts at **0x0800** (a 3-byte `prog_init` stub at
+  0x0800..0x0802 that init `LCALL`s), not 0x0803. [BYTE]
+Between-region 0xFF padding is reproduced by `objcopy --gap-fill=0xFF`; only
+non-0xFF bytes (incl. the dead data `00 12 22` at 0x0020) must be emitted.
 
 ### Serial dispatch `rx_dispatch` (0x03A9) expects A=ETX, header in R6
 To seed a command into the RS-232 dispatch you must set **A = 0x03 (ETX)** and

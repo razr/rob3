@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Behavioral test: prove the RS-232 UART command protocol semantics annotated in
-# firmware/src/annotated/rs232_serial.annotated.asm, by running the REAL ROM in
+# firmware/src/annotated/rs232.asm, by running the REAL ROM in
 # ucSim and observing state.
 #
 # ucSim serial note (verified in src/sims/s51.src/serial.cc): `MOV A,SBUF`
