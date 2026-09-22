@@ -76,90 +76,113 @@
         ; (0x07B7.. more housekeeping, then loops back to main_loop)
         ; falls around to the tb_poll call site below when P3.4 is HIGH:
         .org    0x074D
-L_074D:
-        clr 0xAF                            ; C2 AF  074D
-        setb 0xD4                           ; D2 D4  074F
-        jnb 0x2F, L_0780                    ; 30 2F 2C  0751
-        mov A, 0x21                         ; E5 21  0754
-        cjne A, #0x3F, L_0763               ; B4 3F 0A  0756
-        mov A, 0x2B                         ; E5 2B  0759
-        jnz L_0780                          ; 70 23  075B
-        mov C, 0x19                         ; A2 19  075D
-        mov 0x2A, C                         ; 92 2A  075F
-        sjmp L_077E                         ; 80 1B  0761
-L_0763:
-        jnb 0x1E, L_0780                    ; 30 1E 1A  0763
-        clr 0x1E                            ; C2 1E  0766
-        djnz 0x19, L_0780                   ; D5 19 15  0768
-        clr 0x00                            ; C2 00  076B
-        clr A                               ; E4  076D
-        mov 0x83, #0x50                     ; 75 83 50  076E
-        movx @DPTR, A                       ; F0  0771
-        mov 0x4E, A                         ; F5 4E  0772
-        mov 0x83, #0x52                     ; 75 83 52  0774
-        movx @DPTR, A                       ; F0  0777
-        mov 0x4F, A                         ; F5 4F  0778
-        mov R4, #0xF7                       ; 7C F7  077A
-        setb 0x2B                           ; D2 2B  077C
-L_077E:
-        clr 0x2F                            ; C2 2F  077E
-L_0780:
-        jnb 0x18, L_0785                    ; 30 18 02  0780
-        acall 0x0541                        ; B1 41  0783
-L_0785:
-        jnb 0x1F, L_0797                    ; 30 1F 0F  0785
-        clr 0x1F                            ; C2 1F  0788
-        jnb 0x22, L_0797                    ; 30 22 0A  078A
-        djnz 0x18, L_0797                   ; D5 18 07  078D
-        anl 0x24, #0xF0                     ; 53 24 F0  0790
-        mov R4, #0xF1                       ; 7C F1  0793
-        setb 0x2B                           ; D2 2B  0795
-L_0797:
-        clr 0xD4                            ; C2 D4  0797
-        lcall 0x0900                        ; 12 09 00  0799
-        setb 0xAF                           ; D2 AF  079C
-        jnb 0x04, L_074D                    ; 30 04 AC  079E
-        jnb 0x02, L_074D                    ; 30 02 A9  07A1
-        clr 0x04                            ; C2 04  07A4
-        jb 0x43, L_074D                     ; 20 43 A4  07A6
-        clr 0xAF                            ; C2 AF  07A9
-        jb 0xB4, L_07C4                     ; 20 B4 16  07AB
-        clr A                               ; E4  07AE
-        mov 0x26, A                         ; F5 26  07AF
-        mov 0x66, A                         ; F5 66  07B1
-        mov 0x67, 0x3F                      ; 85 3F 67  07B3
-        lcall 0x0803                        ; 12 08 03  07B6
-        jnb 0x41, L_07CC                    ; 30 41 10  07B9
-        mov 0x1F, #0xFF                     ; 75 1F FF  07BC
-        orl 0x28, #0x0C                     ; 43 28 0C  07BF
-        sjmp L_07CC                         ; 80 08  07C2
-L_07C4:
-        lcall 0x0C00                        ; 12 0C 00  07C4
-        jz L_07CC                           ; 60 03  07C7
-        lcall 0x0C80                        ; 12 0C 80  07C9
-L_07CC:
-        setb 0xAF                           ; D2 AF  07CC
-        ajmp 0x074D                         ; E1 4D  07CE
-        anl A, #0x03                        ; 54 03  07D0
-        mov R2, A                           ; FA  07D2
-        mov A, 0x1F                         ; E5 1F  07D3
-        djnz R2, L_07DA                     ; DA 03  07D5
-        orl A, R0                           ; 48  07D7
-        sjmp L_07E5                         ; 80 0B  07D8
-L_07DA:
-        djnz R2, L_07DF                     ; DA 03  07DA
-        anl A, R0                           ; 58  07DC
-        sjmp L_07E5                         ; 80 06  07DD
-L_07DF:
-        djnz R2, L_07E4                     ; DA 03  07DF
-        xrl A, R0                           ; 68  07E1
-        sjmp L_07E5                         ; 80 01  07E2
-L_07E4:
-        mov A, R0                           ; E8  07E4
-L_07E5:
-        mov 0x7F, 0x83                      ; 85 83 7F  07E5
-        mov 0x83, #0x51                     ; 75 83 51  07E8
-        mov 0x1F, A                         ; F5 1F  07EB
-        movx @DPTR, A                       ; F0  07ED
-        mov 0x83, 0x7F                      ; 85 7F 83  07EE
-        ret                                 ; 22  07F1
+
+;==============================================================================
+; THE IDLE SUPER-LOOP
+;==============================================================================
+main_loop:
+        clr     IE_EA               ; C2 AF     EA = 0 (guard the flag section)
+        setb    PSW_RS1             ; D2 D4     PSW.4 = 1 (register bank 2)
+
+;--- motion servicing: if 0x25.7 (motion-active) is set ---
+        jnb     0x2F,ml_no_motion   ; 30 2F 2C  0x25.7 clear -> skip motion
+        mov     A,AXIS_ACTIVE       ; E5 21     A = axis-active mask (0x3F = all)
+        cjne    A,#0x3F,ml_motion_tick ; B4 3F 0A  not all-active -> tick path
+        mov     A,NEED_MOVE         ; E5 2B     A = "need-move" mask
+        jnz     ml_no_motion        ; 70 23     still moving -> skip
+        mov     C,TMR_ACK_REQ       ; A2 19     0x23.1 ack-request flag
+        mov     0x2A,C              ; 92 2A     store into editor flags [INFER]
+        sjmp    ml_motion_done      ; 80 1B
+ml_motion_tick:
+        jnb     TMR_EVT_MOTION,ml_no_motion ; 30 1E 1A  0x23.6 slow event? skip if not
+        clr     TMR_EVT_MOTION      ; C2 1E     consume the event
+        djnz    AXIS_WATCHDOG,ml_no_motion ; D5 19 15  watchdog not expired -> skip
+        clr     SYS_AXIS_ENABLE     ; C2 00     0x20.0 disable axis subsystem
+        clr     A                   ; E4
+        mov     SFR_DPH,#DEV_8255_PA ; 75 83 50 DPH -> Port A
+        movx    @DPTR,A             ; F0        Port A = 0 (motors off)
+        mov     PORTA_SHADOW,A      ; F5 4E     clear shadow
+        mov     SFR_DPH,#DEV_8255_PC ; 75 83 52 DPH -> Port C
+        movx    @DPTR,A             ; F0        Port C = 0 (motors off)
+        mov     PORTC_SHADOW,A      ; F5 4F     clear shadow
+        mov     R4,#0xF7            ; 7C F7     R4 = 0xF7 status/reply code [INFER]
+        setb    0x2B                ; D2 2B     set bit 0x25.3 (TX flag) [INFER]
+ml_motion_done:
+        clr     0x2F                ; C2 2F     clear 0x25.7 (motion-active done)
+
+;--- serial housekeeping ---
+ml_no_motion:
+        jnb     0x18,ml_no_serial   ; 30 18 02  bit 0x23.0 not set -> skip
+        acall   0x0541              ; B1 41     call TX helper (rs232.asm)
+ml_no_serial:
+        jnb     TMR_EVT_SERIAL,ml_poll_gate ; 30 1F 0F  0x23.7 serial-timeout? skip if not
+        clr     TMR_EVT_SERIAL      ; C2 1F     consume the tick
+        jnb     0x22,ml_poll_gate   ; 30 22 0A  bit 0x24.2 (RX ready?) -> skip [INFER]
+        djnz    SER_TIMEOUT,ml_poll_gate ; D5 18 07  timeout not expired -> skip
+        anl     RX_FLAGS,#0xF0      ; 53 24 F0  reset RX state machine low nibble
+        mov     R4,#0xF1            ; 7C F1     R4 = 0xF1 (reset-ACK reply)
+        setb    0x2B                ; D2 2B     set bit 0x25.3 (arm TX)
+
+;--- check gates, then poll teachbox or run program ---
+ml_poll_gate:
+        clr     PSW_RS1             ; C2 D4     PSW.4 = 0 (back to bank 0)
+        lcall   0x0900              ; 12 09 00  motion executor gate (program.asm) [INFER]
+        setb    IE_EA               ; D2 AF     EA = 1 (re-enable ints)
+        jnb     SYS_TIMER_REQ,main_loop ; 30 04 AC  0x20.4 not set -> loop
+        jnb     SYS_BAUD_DET,main_loop  ; 30 02 A9  baud not ready -> loop
+        clr     SYS_TIMER_REQ       ; C2 04     consume the periodic request
+        jb      STATE_MOTION,main_loop ; 20 43 A4  0x28.3 motion active -> loop
+        clr     IE_EA               ; C2 AF     EA = 0
+
+;--- GATE 3: P3.4 = HIGH -> poll the teachbox keypad ---
+        jb      P3_T0,tb_poll       ; 20 B4 16  P3.4 HIGH -> scan keypad
+        ; P3.4 LOW: skip keypad, run program path instead
+        clr     A                   ; E4
+        mov     PROG_EXEC_CTRL,A    ; F5 26     clear program exec control
+        mov     PC_LO,A             ; F5 66     reset program PC low
+        mov     PC_HI,PROG_PAGE1    ; 85 3F 67  PC high = body page
+        lcall   0x0803              ; 12 08 03  call prog_prepare (program.asm)
+        jnb     STATE_PROG_LOAD,ml_return ; 30 41 10  no program loaded -> skip
+        mov     DOUT_SHADOW,#0xFF   ; 75 1F FF  idle the digital-out shadow
+        orl     STATE_FLAGS,#0x0C   ; 43 28 0C  set 0x28.2/.3 (running+motion)
+        sjmp    ml_return           ; 80 08
+
+tb_poll:
+        lcall   0x0C00              ; 12 0C 00  kbd_scan (teachbox.asm)
+        jz      ml_return           ; 60 03     no key -> skip
+        lcall   0x0C80              ; 12 0C 80  kbd_handle (teachbox.asm)
+
+ml_return:
+        setb    IE_EA               ; D2 AF     EA = 1
+        ajmp    main_loop           ; E1 4D     back to top
+
+;==============================================================================
+; DIGITAL-OUTPUT WRITE HELPER (0x07D0)                                  [BYTE]
+;   Called from the teachbox editor to set/clear/toggle/load bits in the
+;   digital-out shadow (0x1F / Port B).  R2 = op (1=ORL, 2=ANL, 3=XRL, else=MOV),
+;   R0 = mask/value, A = result written to 0x1F and Port B.
+;==============================================================================
+dout_write:
+        anl     A,#0x03             ; 54 03     mask op selector (0..3)
+        mov     R2,A                ; FA        R2 = op
+        mov     A,DOUT_SHADOW       ; E5 1F     A = current shadow
+        djnz    R2,dout_and         ; DA 03     op 1 -> ORL
+        orl     A,R0                ; 48        A |= R0
+        sjmp    dout_commit         ; 80 0B
+dout_and:
+        djnz    R2,dout_xor         ; DA 03     op 2 -> ANL
+        anl     A,R0                ; 58        A &= R0
+        sjmp    dout_commit         ; 80 06
+dout_xor:
+        djnz    R2,dout_load        ; DA 03     op 3 -> XRL
+        xrl     A,R0                ; 68        A ^= R0
+        sjmp    dout_commit         ; 80 01
+dout_load:
+        mov     A,R0                ; E8        A = R0 (direct load)
+dout_commit:
+        mov     0x7F,SFR_DPH       ; 85 83 7F  save DPH
+        mov     SFR_DPH,#DEV_8255_PB ; 75 83 51  DPH -> 8255 Port B
+        mov     DOUT_SHADOW,A       ; F5 1F     update shadow
+        movx    @DPTR,A             ; F0        write to Port B
+        mov     SFR_DPH,0x7F       ; 85 7F 83  restore DPH
+        ret                         ; 22
