@@ -679,6 +679,13 @@
 ; The annotations above document the code; this section makes it assemble 1:1.
 ;==============================================================================
         .org    0x0203
+;
+;==============================================================================
+; RS-232 DATA TABLES (0x0203..0x028B)                                   [BYTE]
+;   Inline data referenced by MOVC from the protocol dispatch and the
+;   axis-servo routine. Linear disassembly decodes these as instructions
+;   but they are DATA — emitted as-is for 1:1.
+;==============================================================================
         addc A, R7                          ; 3F  0203
         xch A, R7                           ; CF  0204
         movx @R1, A                         ; F3  0205
@@ -762,129 +769,21 @@ L_0278:
         mov A, R0                           ; E8  027D
         inc A                               ; 04  027E
         anl A, #0x07                        ; 54 07  027F
-        mov 0x83, #0x58                     ; 75 83 58  0281
+        mov SFR_DPH, #DEV_ADC_START                     ; 75 83 58  0281
         movx @DPTR, A                       ; F0  0284
         orl A, #0x48                        ; 44 48  0285
         mov R0, A                           ; F8  0287
         mov A, R2                           ; EA  0288
         pop 0xD0                            ; D0 D0  0289
         reti                                ; 32  028B
-        mov R7, A                           ; FF  028C
-        mov R7, A                           ; FF  028D
-        mov R7, A                           ; FF  028E
-        mov R7, A                           ; FF  028F
-        mov R7, A                           ; FF  0290
-        mov R7, A                           ; FF  0291
-        mov R7, A                           ; FF  0292
-        mov R7, A                           ; FF  0293
-        mov R7, A                           ; FF  0294
-        mov R7, A                           ; FF  0295
-        mov R7, A                           ; FF  0296
-        mov R7, A                           ; FF  0297
-        mov R7, A                           ; FF  0298
-        mov R7, A                           ; FF  0299
-        mov R7, A                           ; FF  029A
-        mov R7, A                           ; FF  029B
-        mov R7, A                           ; FF  029C
-        mov R7, A                           ; FF  029D
-        mov R7, A                           ; FF  029E
-        mov R7, A                           ; FF  029F
-        mov R7, A                           ; FF  02A0
-        mov R7, A                           ; FF  02A1
-        mov R7, A                           ; FF  02A2
-        mov R7, A                           ; FF  02A3
-        mov R7, A                           ; FF  02A4
-        mov R7, A                           ; FF  02A5
-        mov R7, A                           ; FF  02A6
-        mov R7, A                           ; FF  02A7
-        mov R7, A                           ; FF  02A8
-        mov R7, A                           ; FF  02A9
-        mov R7, A                           ; FF  02AA
-        mov R7, A                           ; FF  02AB
-        mov R7, A                           ; FF  02AC
-        mov R7, A                           ; FF  02AD
-        mov R7, A                           ; FF  02AE
-        mov R7, A                           ; FF  02AF
-        mov R7, A                           ; FF  02B0
-        mov R7, A                           ; FF  02B1
-        mov R7, A                           ; FF  02B2
-        mov R7, A                           ; FF  02B3
-        mov R7, A                           ; FF  02B4
-        mov R7, A                           ; FF  02B5
-        mov R7, A                           ; FF  02B6
-        mov R7, A                           ; FF  02B7
-        mov R7, A                           ; FF  02B8
-        mov R7, A                           ; FF  02B9
-        mov R7, A                           ; FF  02BA
-        mov R7, A                           ; FF  02BB
-        mov R7, A                           ; FF  02BC
-        mov R7, A                           ; FF  02BD
-        mov R7, A                           ; FF  02BE
-        mov R7, A                           ; FF  02BF
-        mov R7, A                           ; FF  02C0
-        mov R7, A                           ; FF  02C1
-        mov R7, A                           ; FF  02C2
-        mov R7, A                           ; FF  02C3
-        mov R7, A                           ; FF  02C4
-        mov R7, A                           ; FF  02C5
-        mov R7, A                           ; FF  02C6
-        mov R7, A                           ; FF  02C7
-        mov R7, A                           ; FF  02C8
-        mov R7, A                           ; FF  02C9
-        mov R7, A                           ; FF  02CA
-        mov R7, A                           ; FF  02CB
-        mov R7, A                           ; FF  02CC
-        mov R7, A                           ; FF  02CD
-        mov R7, A                           ; FF  02CE
-        mov R7, A                           ; FF  02CF
-        mov R7, A                           ; FF  02D0
-        mov R7, A                           ; FF  02D1
-        mov R7, A                           ; FF  02D2
-        mov R7, A                           ; FF  02D3
-        mov R7, A                           ; FF  02D4
-        mov R7, A                           ; FF  02D5
-        mov R7, A                           ; FF  02D6
-        mov R7, A                           ; FF  02D7
-        mov R7, A                           ; FF  02D8
-        mov R7, A                           ; FF  02D9
-        mov R7, A                           ; FF  02DA
-        mov R7, A                           ; FF  02DB
-        mov R7, A                           ; FF  02DC
-        mov R7, A                           ; FF  02DD
-        mov R7, A                           ; FF  02DE
-        mov R7, A                           ; FF  02DF
-        mov R7, A                           ; FF  02E0
-        mov R7, A                           ; FF  02E1
-        mov R7, A                           ; FF  02E2
-        mov R7, A                           ; FF  02E3
-        mov R7, A                           ; FF  02E4
-        mov R7, A                           ; FF  02E5
-        mov R7, A                           ; FF  02E6
-        mov R7, A                           ; FF  02E7
-        mov R7, A                           ; FF  02E8
-        mov R7, A                           ; FF  02E9
-        mov R7, A                           ; FF  02EA
-        mov R7, A                           ; FF  02EB
-        mov R7, A                           ; FF  02EC
-        mov R7, A                           ; FF  02ED
-        mov R7, A                           ; FF  02EE
-        mov R7, A                           ; FF  02EF
-        mov R7, A                           ; FF  02F0
-        mov R7, A                           ; FF  02F1
-        mov R7, A                           ; FF  02F2
-        mov R7, A                           ; FF  02F3
-        mov R7, A                           ; FF  02F4
-        mov R7, A                           ; FF  02F5
-        mov R7, A                           ; FF  02F6
-        mov R7, A                           ; FF  02F7
-        mov R7, A                           ; FF  02F8
-        mov R7, A                           ; FF  02F9
-        mov R7, A                           ; FF  02FA
-        mov R7, A                           ; FF  02FB
-        mov R7, A                           ; FF  02FC
-        mov R7, A                           ; FF  02FD
-        mov R7, A                           ; FF  02FE
-        mov R7, A                           ; FF  02FF
+; --- 0x028C..0x02FF : 0xFF-count 116 0xFF EPROM padding (objcopy gap-fill) ---
+        .org    0x0300
+;
+;==============================================================================
+; isr_serial (0x0300) — UART RX/TX ISR                                  [BYTE]
+;   Reached by LJMP 0x0300 at 0x0035 (fall-through from the 0x0023 vector).
+;   Handles both receive (RX parser -> rx_dispatch) and transmit (TX helper).
+;==============================================================================
         push 0xD0                           ; C0 D0  0300
         setb 0xD4                           ; D2 D4  0302
         mov R7, A                           ; FF  0304
@@ -978,8 +877,13 @@ L_03A3:
         mov R2, #0x06                       ; 7A 06  03A3
         mov R0, #0x70                       ; 78 70  03A5
         ajmp 0x0525                         ; A1 25  03A7
+;
+;==============================================================================
+; rx_dispatch (0x03A9) — command dispatch: A=ETX check, reload header from R6,
+;   branch on bit7 (class-0 axis vs class-1 system), then sub-dispatch.
+;==============================================================================
 L_03A9:
-        anl 0x24, #0xC0                     ; 53 24 C0  03A9
+        anl RX_FLAGS, #0xC0                     ; 53 24 C0  03A9
         mov R4, #0xF3                       ; 7C F3  03AC
         cjne A, #0x03, L_03C1               ; B4 03 10  03AE
         mov A, R6                           ; EE  03B1
@@ -1065,6 +969,11 @@ L_0437:
         djnz R6, L_03C1                     ; DE 86  0439
         lcall 0x0A34                        ; 12 0A 34  043B
         sjmp L_040D                         ; 80 CD  043E
+;
+;==============================================================================
+; cmd_class0 (0x0440) — axis/position command handler (header.7=0):
+;   query (bit6=1), set-position (bit4=0), position+speed (bit4=1,bit5=1).
+;==============================================================================
 L_0440:
         jnb 0xE6, L_04AF                    ; 30 E6 6C  0440
         jb 0xE5, L_048C                     ; 20 E5 46  0443
@@ -1157,6 +1066,7 @@ L_04F0:
         orl 0x10, #0x70                     ; 43 10 70  04F5
         mov @R0, 0x61                       ; A6 61  04F8
         movc A, @A + PC                     ; 83  04FA
+;--- MOVC DATA: 1<<axis bit-weight table (inline, read by cmd_class0) ---
 L_04FB:
         orl 0x2B, A                         ; 42 2B  04FB
         orl 0x2C, A                         ; 42 2C  04FD
@@ -1193,17 +1103,13 @@ L_052C:
         mov A, R7                           ; EF  052C
         pop 0xD0                            ; D0 D0  052D
         reti                                ; 32  052F
-        mov R7, A                           ; FF  0530
-        mov R7, A                           ; FF  0531
-        mov R7, A                           ; FF  0532
-        mov R7, A                           ; FF  0533
-        mov R7, A                           ; FF  0534
-        mov R7, A                           ; FF  0535
-        mov R7, A                           ; FF  0536
-        mov R7, A                           ; FF  0537
-        mov R7, A                           ; FF  0538
-        mov R7, A                           ; FF  0539
-        mov R7, A                           ; FF  053A
+; --- 0x0530..0x053A : 0xFF-count 11 0xFF EPROM padding (objcopy gap-fill) ---
+        .org    0x053B
+;
+;==============================================================================
+; serial_tx / TX helper (0x0541) — transmits the response buffer, ending with
+;   ETX (0x03). Called from the main loop via ACALL 0x0541.
+;==============================================================================
         ajmp 0x0002                         ; 01 02  053B
         inc A                               ; 04  053D
         inc R0                              ; 08  053E
