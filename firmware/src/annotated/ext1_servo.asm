@@ -243,230 +243,256 @@
         ; the top file rob3.asm, which includes this region in address order.
 
         .org    0x00C0
-        push 0xD0                           ; C0 D0  00C0
-        setb 0xD3                           ; D2 D3  00C2
-        mov R2, A                           ; FA  00C4
-        mov A, R0                           ; E8  00C5
-        add A, #0x10                        ; 24 10  00C6
-        mov R1, A                           ; F9  00C8
-        jb 0x17, L_00D5                     ; 20 17 09  00C9
-        jnb 0x16, L_00DC                    ; 30 16 0D  00CC
-        mov C, 0x1C                         ; A2 1C  00CF
-        mov 0x1B, C                         ; 92 1B  00D1
-        clr 0x1C                            ; C2 1C  00D3
-L_00D5:
-        mov 0x83, #0x59                     ; 75 83 59  00D5
-        movx A, @DPTR                       ; E0  00D8
-        mov @R1, A                          ; F7  00D9
-        ajmp 0x0278                         ; 41 78  00DA
-L_00DC:
-        mov 0x83, #0x58                     ; 75 83 58  00DC
-        rl A                                ; 23  00DF
-        add A, R1                           ; 29  00E0
-        add A, #0xDE                        ; 24 DE  00E1
-        mov R4, A                           ; FC  00E3
-        movc A, @A + PC                     ; 83  00E4
-        xch A, R4                           ; CC  00E5
-        movc A, @A + PC                     ; 83  00E6
-        mov 0xF0, A                         ; F5 F0  00E7
-        movx A, @DPTR                       ; E0  00E9
-        mov R5, A                           ; FD  00EA
-        inc 0x83                            ; 05 83  00EB
-        movx A, @DPTR                       ; E0  00ED
-        subb A, R4                          ; 9C  00EE
-        jc L_0118                           ; 40 27  00EF
-        mov @R1, A                          ; F7  00F1
-        mov A, R5                           ; ED  00F2
-        mov R5, 0xF0                        ; AD F0  00F3
-        mul AB                              ; A4  00F5
-        mov R4, 0xF0                        ; AC F0  00F6
-        mov A, @R1                          ; E7  00F8
-        mov 0xF0, R5                        ; 8D F0  00F9
-        mul AB                              ; A4  00FB
-        add A, R4                           ; 2C  00FC
-        rl A                                ; 23  00FD
-        rl A                                ; 23  00FE
-        anl A, #0x03                        ; 54 03  00FF
-L_0101:
-        mov R4, A                           ; FC  0101
-        mov A, 0xF0                         ; E5 F0  0102
-        addc A, #0x00                       ; 34 00  0104
-        rlc A                               ; 33  0106
-        jc L_0125                           ; 40 1C  0107
-        rlc A                               ; 33  0109
-        orl A, R4                           ; 4C  010A
-        jc L_012F                           ; 40 22  010B
-        mov @R1, A                          ; F7  010D
-        anl 0x09, #0x57                     ; 53 09 57  010E
-        subb A, @R1                         ; 97  0111
-        jnz L_0136                          ; 70 22  0112
-        mov R4, #0x00                       ; 7C 00  0114
-        sjmp L_0145                         ; 80 2D  0116
-L_0118:
-        mov @R1, #0x00                      ; 77 00  0118
-        mov R4, #0x08                       ; 7C 08  011A
-        subb A, #0xF9                       ; 94 F9  011C
-        mov R6, A                           ; FE  011E
-        jz L_0129                           ; 60 08  011F
-        jc L_0129                           ; 40 06  0121
-        sjmp L_0154                         ; 80 2F  0123
-L_0125:
-        mov @R1, #0xFF                      ; 77 FF  0125
-        mov R4, #0x04                       ; 7C 04  0127
-L_0129:
-        mov A, #0x01                        ; 74 01  0129
-        mov R6, #0x0A                       ; 7E 0A  012B
-        sjmp L_0154                         ; 80 25  012D
-L_012F:
-        mov @R1, #0xFF                      ; 77 FF  012F
-        mov R4, #0x04                       ; 7C 04  0131
-        inc A                               ; 04  0133
-        sjmp L_0140                         ; 80 0A  0134
-L_0136:
-        jc L_013C                           ; 40 04  0136
-        mov R4, #0x04                       ; 7C 04  0138
-        sjmp L_0140                         ; 80 04  013A
-L_013C:
-        cpl A                               ; F4  013C
-        inc A                               ; 04  013D
-        mov R4, #0x08                       ; 7C 08  013E
-L_0140:
-        cjne A, #0x0A, L_0143               ; B4 0A 00  0140
-L_0143:
-        jnc L_0129                          ; 50 E4  0143
-L_0145:
-        mov R6, A                           ; FE  0145
-        add A, #0x94                        ; 24 94  0146
-        movc A, @A + PC                     ; 83  0148
-        jbc 0xE7, L_014E                    ; 10 E7 02  0149
-        sjmp L_0154                         ; 80 06  014C
-L_014E:
-        xch A, 0x22                         ; C5 22  014E
-        orl 0x21, A                         ; 42 21  0150
-        xch A, 0x22                         ; C5 22  0152
-L_0154:
-        jb 0x00, L_0159                     ; 20 00 02  0154
-        ajmp 0x0278                         ; 41 78  0157
-L_0159:
-        mov R5, A                           ; FD  0159
-        dec @R0                             ; 16  015A
-        mov A, @R0                          ; E6  015B
-        anl A, #0x0F                        ; 54 0F  015C
-        jnz L_01AC                          ; 70 4C  015E
-        mov A, R5                           ; ED  0160
-        orl A, @R0                          ; 46  0161
-        cjne R6, #0x00, L_0167              ; BE 00 02  0162
-        sjmp L_0198                         ; 80 31  0165
-L_0167:
-        cjne R6, #0x01, L_0171              ; BE 01 07  0167
-        jnb 0xE5, L_0176                    ; 30 E5 09  016A
-        add A, #0x03                        ; 24 03  016D
-        sjmp L_0198                         ; 80 27  016F
-L_0171:
-        mov A, R4                           ; EC  0171
-        swap A                              ; C4  0172
-        orl A, R5                           ; 4D  0173
-        sjmp L_0198                         ; 80 22  0174
-L_0176:
-        jnb 0xE4, L_017B                    ; 30 E4 02  0176
-        add A, #0x02                        ; 24 02  0179
-L_017B:
-        cjne R4, #0x04, L_0183              ; BC 04 05  017B
-        jb 0xE6, L_0186                     ; 20 E6 05  017E
-        sjmp L_0194                         ; 80 11  0181
-L_0183:
-        jnb 0xE7, L_0194                    ; 30 E7 0E  0183
-L_0186:
-        mov 0x09, R0                        ; 88 09  0186
-        xrl 0x09, #0x70                     ; 63 09 70  0188
-        cjne @R1, #0x0F, L_019F             ; B7 0F 11  018B
-        anl A, #0xC0                        ; 54 C0  018E
-        orl A, #0x03                        ; 44 03  0190
-        sjmp L_01A0                         ; 80 0C  0192
-L_0194:
-        xrl A, #0xC0                        ; 64 C0  0194
-        add A, #0x0E                        ; 24 0E  0196
-L_0198:
-        mov 0x09, R0                        ; 88 09  0198
-        xrl 0x09, #0x70                     ; 63 09 70  019A
-        mov @R1, #0xFF                      ; 77 FF  019D
-L_019F:
-        inc @R1                             ; 07  019F
-L_01A0:
-        mov @R0, A                          ; F6  01A0
-        mov A, R0                           ; E8  01A1
-        jbc 0xE2, L_01B4                    ; 10 E2 0F  01A2
-L_01A5:
-        mov 0x83, #0x50                     ; 75 83 50  01A5
-        mov R1, #0x4E                       ; 79 4E  01A8
-        sjmp L_01B9                         ; 80 0D  01AA
-L_01AC:
-        mov R4, #0x00                       ; 7C 00  01AC
-        mov A, R0                           ; E8  01AE
-        jnb 0xE2, L_01A5                    ; 30 E2 F3  01AF
-        clr 0xE2                            ; C2 E2  01B2
-L_01B4:
-        mov 0x83, #0x52                     ; 75 83 52  01B4
-        mov R1, #0x4F                       ; 79 4F  01B7
-L_01B9:
-        mov R5, A                           ; FD  01B9
-        movc A, @A + PC                     ; 83  01BA
-        anl A, @R1                          ; 57  01BB
-        mov @R1, A                          ; F7  01BC
-        mov A, R4                           ; EC  01BD
-        add A, R5                           ; 2D  01BE
-        movc A, @A + PC                     ; 83  01BF
-        orl A, @R1                          ; 47  01C0
-        mov @R1, A                          ; F7  01C1
-        movx @DPTR, A                       ; F0  01C2
-        mov A, 0x22                         ; E5 22  01C3
-        anl A, 0x2B                         ; 55 2B  01C5
-        jnz 0x0214                          ; 70 4B  01C7
-        ajmp 0x0278                         ; 41 78  01C9
-        addc A, R0                          ; 38  01CB
-        nop                                 ; 00  01CC
-        mov R4, #0x50                       ; 7C 50  01CD
-        nop                                 ; 00  01CF
-        clr 0x49                            ; C2 49  01D0
-        nop                                 ; 00  01D2
-        xch A, R5                           ; CD  01D3
-        dec @R1                             ; 17  01D4
-        nop                                 ; 00  01D5
-        anl A, #0x18                        ; 54 18  01D6
-        nop                                 ; 00  01D8
-        anl 0x70, #0x00                     ; 53 70 00  01D9
-        mov R2, A                           ; FA  01DC
-        anl C, 0x85                         ; 82 85  01DD
-        div AB                              ; 84  01DF
-        rr A                                ; 03  01E0
-        rr A                                ; 03  01E1
-        ljmp 0x0101                         ; 02 01 01  01E2
-        ajmp 0x0001                         ; 01 01  01E5
-        mov R7, A                           ; FF  01E7
-        mov R7, A                           ; FF  01E8
-        mov R7, A                           ; FF  01E9
-        mov R7, A                           ; FF  01EA
-        mov R7, A                           ; FF  01EB
-        mov R7, A                           ; FF  01EC
-        mov R7, A                           ; FF  01ED
-        mov R7, A                           ; FF  01EE
-        mov R7, A                           ; FF  01EF
-        mov R7, A                           ; FF  01F0
-        mov R7, A                           ; FF  01F1
-        mov R7, A                           ; FF  01F2
-        mov R7, A                           ; FF  01F3
-        mov R7, A                           ; FF  01F4
-        mov R7, A                           ; FF  01F5
-        mov R7, A                           ; FF  01F6
-        mov R7, A                           ; FF  01F7
-        mov R7, A                           ; FF  01F8
-        mov R7, A                           ; FF  01F9
-        mov R7, A                           ; FF  01FA
-        mov R7, A                           ; FF  01FB
-        mov R7, A                           ; FF  01FC
-        mov R7, A                           ; FF  01FD
-        mov R7, A                           ; FF  01FE
-        mov R7, A                           ; FF  01FF
-        mov R7, A                           ; FF  0200
-        mov R7, A                           ; FF  0201
-        mov R7, A                           ; FF  0202
+
+;==============================================================================
+; ISR ENTRY — save context, derive axis pointer, select phase
+;==============================================================================
+isr_ext1:
+        push    SFR_PSW             ; C0 D0     save PSW
+        setb    PSW_RS0             ; D2 D3     PSW.3 = 1 -> register bank 1
+        mov     R2,A                ; FA        save A
+        mov     A,R0                ; E8        A = bank1 R0 (axis base ptr)
+        add     A,#0x10             ; 24 10     R1 = base + 0x10 (workspace ptr)
+        mov     R1,A                ; F9
+
+;--- phase dispatch: bit7 = ADC-result-read, bit6 = timer hand-off ---
+        jb      AXIS_MASK_B7,ext1_feedback ; 20 17 09  bit7 -> store ADC result
+        jnb     AXIS_MASK_B6,ext1_control  ; 30 16 0D  not bit6 -> real axis control
+
+;--- bit6 housekeeping: timer phase hand-off ---
+        mov     C,TMR_PHASE_B4      ; A2 1C     carry = 0x23.4 (incoming phase)
+        mov     TMR_PHASE_B3,C      ; 92 1B     0x23.3 = carry (publish phase)
+        clr     TMR_PHASE_B4        ; C2 1C     clear incoming
+
+;==============================================================================
+; FEEDBACK PHASE (bit7) — store the just-completed ADC conversion
+;==============================================================================
+ext1_feedback:
+        mov     SFR_DPH,#DEV_ADC_DATA ; 75 83 59  DPH -> ADC data read (0x59)
+        movx    A,@DPTR             ; E0        A = ADC result
+        mov     @R1,A               ; F7        store into feedback[axis]
+        ajmp    0x0278             ; 41 78     -> advance mask/channel
+
+;==============================================================================
+; CONTROL PHASE (bits 0..5) — closed-loop servo for one axis
+;==============================================================================
+ext1_control:
+        mov     SFR_DPH,#DEV_ADC_START ; 75 83 58  DPH -> ADC start (0x58) [HW]
+        rl      A                   ; 23        A = base ptr * 2 (MOVC index)
+        add     A,R1                ; 29
+        add     A,#0xDE             ; 24 DE     offset into inline table
+        mov     R4,A                ; FC        R4 = table offset
+        movc    A,@A+PC             ; 83        fetch profile constant 1
+        xch     A,R4                ; CC        swap: R4=const, A=offset
+        movc    A,@A+PC             ; 83        fetch profile constant 2
+        mov     SFR_B,A             ; F5 F0     B = const2
+
+;--- read ADC feedback, compute signed error vs profile ---
+        movx    A,@DPTR             ; E0        A = ADC feedback (ch A8=0) [HW]
+        mov     R5,A                ; FD        R5 = raw feedback
+        inc     SFR_DPH             ; 05 83     DPH -> 0x59 (ch A8=1)
+        movx    A,@DPTR             ; E0        A = ADC data (ch A8=1)
+        subb    A,R4                ; 9C        A -= R4 (profile-adjusted target)
+        jc      ext1_error_neg      ; 40 27     negative error -> branch
+
+;--- positive error path ---
+        mov     @R1,A               ; F7        workspace = |error|
+        mov     A,R5                ; ED        A = raw feedback
+        mov     R5,SFR_B            ; AD F0     R5 = profile const from B
+        mul     AB                  ; A4        A:B = feedback * const
+        mov     R4,SFR_B            ; AC F0     R4 = high product
+        mov     A,@R1               ; E7        A = |error|
+        mov     SFR_B,R5            ; 8D F0     B = const
+        mul     AB                  ; A4        A:B = error * const
+        add     A,R4                ; 2C        A += high(feedback*const)
+        rl      A                   ; 23        shift
+        rl      A                   ; 23        shift
+        anl     A,#0x03             ; 54 03     mask to 2 bits
+
+;--- scale/clamp the command ---
+ext1_scale:
+        mov     R4,A                ; FC        R4 = scaled command
+        mov     A,SFR_B             ; E5 F0     A = B (remaining product)
+        addc    A,#0x00             ; 34 00
+        rlc     A                   ; 33
+        jc      ext1_clamp_hi       ; 40 1C     overflow -> clamp high
+        rlc     A                   ; 33
+        orl     A,R4                ; 4C
+        jc      ext1_clamp_hi2      ; 40 22     overflow -> clamp high
+        mov     @R1,A               ; F7        workspace = command
+        anl     0x09,#0x57          ; 53 09 57  mask bank1 R1 bits [INFER]
+        subb    A,@R1               ; 97
+        jnz     ext1_moving         ; 70 22     not zero -> axis still moving
+        mov     R4,#0x00            ; 7C 00     R4 = 0 (stopped)
+        sjmp    ext1_lookup         ; 80 2D     -> motor output lookup
+
+;--- negative error path ---
+ext1_error_neg:
+        mov     @R1,#0x00           ; 77 00     workspace = 0 (floor)
+        mov     R4,#0x08            ; 7C 08     R4 = 0x08 (reverse direction flag)
+        subb    A,#0xF9             ; 94 F9     compare magnitude
+        mov     R6,A                ; FE
+        jz      ext1_min_drive      ; 60 08     zero -> minimum drive
+        jc      ext1_min_drive      ; 40 06     small -> minimum drive
+        sjmp    ext1_drive          ; 80 2F     large -> full drive
+
+ext1_clamp_hi:
+        mov     @R1,#0xFF           ; 77 FF     workspace = 0xFF (ceiling)
+        mov     R4,#0x04            ; 7C 04     R4 = 0x04 (forward high)
+ext1_min_drive:
+        mov     A,#0x01             ; 74 01     A = 1 (minimum step)
+        mov     R6,#0x0A            ; 7E 0A     R6 = 0x0A (step rate) [INFER]
+        sjmp    ext1_drive          ; 80 25     -> drive
+
+ext1_clamp_hi2:
+        mov     @R1,#0xFF           ; 77 FF     workspace = 0xFF (ceiling)
+        mov     R4,#0x04            ; 7C 04     R4 = 0x04
+        inc     A                   ; 04
+        sjmp    ext1_set_rate       ; 80 0A
+
+ext1_moving:
+        jc      ext1_moving_neg     ; 40 04
+        mov     R4,#0x04            ; 7C 04     forward direction
+        sjmp    ext1_set_rate       ; 80 04
+ext1_moving_neg:
+        cpl     A                   ; F4        negate
+        inc     A                   ; 04
+        mov     R4,#0x08            ; 7C 08     reverse direction
+
+ext1_set_rate:
+        cjne    A,#0x0A,ext1_set_rate2 ; B4 0A 00  compare with rate threshold
+ext1_set_rate2:
+        jnc     ext1_min_drive      ; 50 E4     >= threshold -> minimum drive
+
+;==============================================================================
+; MOTOR OUTPUT LOOKUP — map (direction, speed) to L293 drive bits
+;==============================================================================
+ext1_lookup:
+        mov     R6,A                ; FE        R6 = speed/command
+        add     A,#0x94             ; 24 94     offset into MOVC table
+        movc    A,@A+PC             ; 83        lookup motor output byte
+        jbc     0xE7,ext1_arm_motion ; 10 E7 02  A.7 set -> arm motion mask
+        sjmp    ext1_drive          ; 80 06
+
+ext1_arm_motion:
+        xch     A,AXIS_MASK         ; C5 22     swap A <-> mask
+        orl     AXIS_ACTIVE,A       ; 42 21     set this axis in active mask
+        xch     A,AXIS_MASK         ; C5 22     restore
+
+;==============================================================================
+; MOTOR DRIVE — write the encoded output to 8255 Port A/C shadow
+;==============================================================================
+ext1_drive:
+        jb      SYS_AXIS_ENABLE,ext1_drive_go ; 20 00 02  axis subsystem on?
+        ajmp    0x0278             ; 41 78     no -> skip drive, just advance
+ext1_drive_go:
+        mov     R5,A                ; FD        R5 = encoded output
+        dec     @R0                 ; 16        decrement decel counter [INFER]
+        mov     A,@R0               ; E6
+        anl     A,#0x0F             ; 54 0F     mask low nibble
+        jnz     ext1_no_step        ; 70 4C     not zero -> hold (no step this pass)
+
+;--- step: apply direction/speed encoding to motor output ---
+        mov     A,R5                ; ED
+        orl     A,@R0               ; 46
+        cjne    R6,#0x00,ext1_speed_nz ; BE 00 02  speed != 0?
+        sjmp    ext1_write_shadow   ; 80 31     speed = 0 -> write as-is
+
+ext1_speed_nz:
+        cjne    R6,#0x01,ext1_speed_gt1 ; BE 01 07  speed != 1?
+        jnb     0xE5,ext1_decel_check ; 30 E5 09  A.5 not set -> decel path
+        add     A,#0x03             ; 24 03     adjust output
+        sjmp    ext1_write_shadow   ; 80 27
+
+ext1_speed_gt1:
+        mov     A,R4                ; EC        A = direction/flag
+        swap    A                   ; C4        swap nibbles
+        orl     A,R5                ; 4D        merge with speed
+        sjmp    ext1_write_shadow   ; 80 22
+
+ext1_decel_check:
+        jnb     0xE4,ext1_decel2    ; 30 E4 02  A.4 -> decel step 2
+        add     A,#0x02             ; 24 02
+
+ext1_decel2:
+        cjne    R4,#0x04,ext1_decel3 ; BC 04 05  direction forward?
+        jb      0xE6,ext1_decel_apply ; 20 E6 05  A.6 set -> apply
+        sjmp    ext1_decel_alt      ; 80 11
+
+ext1_decel3:
+        jnb     0xE7,ext1_decel_alt ; 30 E7 0E  A.7 not set -> alt path
+
+ext1_decel_apply:
+        mov     0x09,R0             ; 88 09     save R0 to bank1 R1 [INFER]
+        xrl     0x09,#0x70          ; 63 09 70  XOR with 0x70 -> decel ptr
+        cjne    @R1,#0x0F,ext1_decel_step ; B7 0F 11  decel count != 0x0F?
+        anl     A,#0xC0             ; 54 C0     mask top 2 bits
+        orl     A,#0x03             ; 44 03     set low bits
+        sjmp    ext1_store_output   ; 80 0C
+
+ext1_decel_alt:
+        xrl     A,#0xC0             ; 64 C0
+        add     A,#0x0E             ; 24 0E
+
+ext1_write_shadow:
+        mov     0x09,R0             ; 88 09     save R0
+        xrl     0x09,#0x70          ; 63 09 70  -> decel ptr
+        mov     @R1,#0xFF           ; 77 FF     reset decel counter
+
+ext1_decel_step:
+        inc     @R1                 ; 07        increment decel counter
+
+ext1_store_output:
+        mov     @R0,A               ; F6        store output to workspace
+
+;--- select Port A (axes 0..3) or Port C (axes 4..5) ---
+        mov     A,R0                ; E8        A = axis base ptr
+        jbc     0xE2,ext1_portc     ; 10 E2 0F  A.2 set -> Port C path (axes 4..5)
+ext1_porta:
+        mov     SFR_DPH,#DEV_8255_PA ; 75 83 50  DPH -> Port A
+        mov     R1,#PORTA_SHADOW    ; 79 4E     R1 -> Port A shadow
+        sjmp    ext1_write_port     ; 80 0D
+
+ext1_no_step:
+        mov     R4,#0x00            ; 7C 00     R4 = 0 (no new command)
+        mov     A,R0                ; E8
+        jnb     0xE2,ext1_porta     ; 30 E2 F3  not bit2 -> Port A
+        clr     0xE2                ; C2 E2     clear the select bit
+
+ext1_portc:
+        mov     SFR_DPH,#DEV_8255_PC ; 75 83 52  DPH -> Port C
+        mov     R1,#PORTC_SHADOW    ; 79 4F     R1 -> Port C shadow
+
+;--- read-modify-write the port shadow with MOVC mask tables ---
+ext1_write_port:
+        mov     R5,A                ; FD        R5 = axis base ptr (MOVC index)
+        movc    A,@A+PC             ; 83        fetch AND-mask from table
+        anl     A,@R1               ; 57        clear this axis's bits in shadow
+        mov     @R1,A               ; F7        update shadow
+        mov     A,R4                ; EC        A = direction+speed encoding
+        add     A,R5                ; 2D        offset into OR-mask table
+        movc    A,@A+PC             ; 83        fetch OR-mask
+        orl     A,@R1               ; 47        set this axis's new bits
+        mov     @R1,A               ; F7        update shadow
+        movx    @DPTR,A             ; F0        write to 8255 port [HW]
+
+;--- check if this axis's motion is complete ---
+        mov     A,AXIS_MASK         ; E5 22     A = current mask
+        anl     A,NEED_MOVE         ; 55 2B     mask & need-move
+        jnz     0x0214              ; 70 4B     still needed -> set motion-active flag
+        ajmp    0x0278             ; 41 78     done -> advance
+
+;==============================================================================
+; INLINE MOVC LOOKUP TABLES (0x01CB..0x01E6)                            [BYTE]
+;   Decoded as instructions by the disassembler but this is DATA — the MOVC
+;   table entries for the motor-output AND/OR masks + profile constants.
+;   Emitted as raw bytes to guarantee 1:1.
+;==============================================================================
+        .db     0x38,0x00,0x7C,0x50,0x00,0xC2,0x49,0x00 ; 01CB
+        .db     0xCD,0x17,0x00,0x54,0x18,0x00,0x53,0x70 ; 01D3
+        .db     0x00,0xFA,0x82,0x85,0x84,0x03,0x03      ; 01DB
+
+;--- 0xFF padding (0x01E2..0x0202) — objcopy gap-fill handles this ---
+;   The region extends to 0x0202 to cover the full ext1 address span;
+;   bytes 0x01E2..0x0202 are 0xFF in the ROM (no code).
+        .db     0x02,0x01,0x01,0x01,0x01                ; 01E2  (non-FF tail)
