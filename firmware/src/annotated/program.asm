@@ -169,23 +169,28 @@
 ;   executes the NEXT program instruction (prog_exec, 0x0941).
 ;==============================================================================
         .org    0x0800
+;
+;==============================================================================
+; prog_init (0x0800) — 3-byte stub: if not program-loaded, skip to prog_error
+;   Called by init at LCALL 0x0800.
+;==============================================================================
         jnb 0x41, L_0880                    ; 30 41 7D  0800
         setb 0x41                           ; D2 41  0803
-        mov 0x83, 0x3E                      ; 85 3E 83  0805
-        mov 0x82, #0xEE                     ; 75 82 EE  0808
+        mov SFR_DPH, PROG_PAGE                      ; 85 3E 83  0805
+        mov SFR_DPL, #0xEE                     ; 75 82 EE  0808
 L_080B:
         clr A                               ; E4  080B
         movx @DPTR, A                       ; F0  080C
         dec 0x82                            ; 15 82  080D
-        mov A, 0x3F                         ; E5 3F  080F
+        mov A, PROG_PAGE1                         ; E5 3F  080F
         movx @DPTR, A                       ; F0  0811
         djnz 0x82, L_080B                   ; D5 82 F6  0812
         clr A                               ; E4  0815
         movx @DPTR, A                       ; F0  0816
-        mov 0x82, #0xFE                     ; 75 82 FE  0817
+        mov SFR_DPL, #0xFE                     ; 75 82 FE  0817
         movx A, @DPTR                       ; E0  081A
         mov 0x7E, A                         ; F5 7E  081B
-        mov 0x76, A                         ; F5 76  081D
+        mov PROG_END_LO, A                         ; F5 76  081D
         anl A, #0x07                        ; 54 07  081F
         jnz L_0880                          ; 70 5D  0821
         inc DPTR                            ; A3  0823
@@ -193,18 +198,18 @@ L_080B:
         mov 0x7F, A                         ; F5 7F  0825
         orl A, 0x7E                         ; 45 7E  0827
         jz L_0880                           ; 60 55  0829
-        mov A, 0x3F                         ; E5 3F  082B
+        mov A, PROG_PAGE1                         ; E5 3F  082B
         add A, 0x7F                         ; 25 7F  082D
-        mov 0x77, A                         ; F5 77  082F
-        mov 0x83, A                         ; F5 83  0831
-        mov 0x82, 0x7E                      ; 85 7E 82  0833
+        mov PROG_END_HI, A                         ; F5 77  082F
+        mov SFR_DPH, A                         ; F5 83  0831
+        mov SFR_DPL, 0x7E                      ; 85 7E 82  0833
         movx A, @DPTR                       ; E0  0836
         cjne A, #0x83, L_0880               ; B4 83 46  0837
 L_083A:
         mov A, #0xF8                        ; 74 F8  083A
 L_083C:
         add A, 0x82                         ; 25 82  083C
-        mov 0x82, A                         ; F5 82  083E
+        mov SFR_DPL, A                         ; F5 82  083E
         jnc L_084E                          ; 50 0C  0840
         jnz L_0850                          ; 70 0C  0842
         mov A, 0x83                         ; E5 83  0844
@@ -234,26 +239,26 @@ L_0860:
         xch A, 0x82                         ; C5 82  0868
         mov 0x7E, A                         ; F5 7E  086A
         mov 0x7F, 0x83                      ; 85 83 7F  086C
-        mov 0x83, 0x3E                      ; 85 3E 83  086F
+        mov SFR_DPH, PROG_PAGE                      ; 85 3E 83  086F
         movx @DPTR, A                       ; F0  0872
         inc DPTR                            ; A3  0873
         mov A, 0x7F                         ; E5 7F  0874
         movx @DPTR, A                       ; F0  0876
-        mov 0x83, A                         ; F5 83  0877
-        mov 0x82, 0x7E                      ; 85 7E 82  0879
+        mov SFR_DPH, A                         ; F5 83  0877
+        mov SFR_DPL, 0x7E                      ; 85 7E 82  0879
         sjmp L_083A                         ; 80 BC  087C
         mov R7, A                           ; FF  087E
         mov R7, A                           ; FF  087F
 L_0880:
-        anl 0x28, #0x01                     ; 53 28 01  0880
-        mov 0x82, #0xFD                     ; 75 82 FD  0883
-        mov 0x83, 0x3E                      ; 85 3E 83  0886
+        anl STATE_FLAGS, #0x01                     ; 53 28 01  0880
+        mov SFR_DPL, #0xFD                     ; 75 82 FD  0883
+        mov SFR_DPH, PROG_PAGE                      ; 85 3E 83  0886
         mov A, #0x80                        ; 74 80  0889
         movx @DPTR, A                       ; F0  088B
         inc DPTR                            ; A3  088C
         clr A                               ; E4  088D
-        mov 0x76, A                         ; F5 76  088E
-        mov 0x77, 0x3F                      ; 85 3F 77  0890
+        mov PROG_END_LO, A                         ; F5 76  088E
+        mov PROG_END_HI, 0x3F                      ; 85 3F 77  0890
         movx @DPTR, A                       ; F0  0893
         inc DPTR                            ; A3  0894
         movx @DPTR, A                       ; F0  0895
@@ -261,111 +266,17 @@ L_0880:
         mov A, #0x83                        ; 74 83  0897
         movx @DPTR, A                       ; F0  0899
         ret                                 ; 22  089A
-        mov R7, A                           ; FF  089B
-        mov R7, A                           ; FF  089C
-        mov R7, A                           ; FF  089D
-        mov R7, A                           ; FF  089E
-        mov R7, A                           ; FF  089F
-        mov R7, A                           ; FF  08A0
-        mov R7, A                           ; FF  08A1
-        mov R7, A                           ; FF  08A2
-        mov R7, A                           ; FF  08A3
-        mov R7, A                           ; FF  08A4
-        mov R7, A                           ; FF  08A5
-        mov R7, A                           ; FF  08A6
-        mov R7, A                           ; FF  08A7
-        mov R7, A                           ; FF  08A8
-        mov R7, A                           ; FF  08A9
-        mov R7, A                           ; FF  08AA
-        mov R7, A                           ; FF  08AB
-        mov R7, A                           ; FF  08AC
-        mov R7, A                           ; FF  08AD
-        mov R7, A                           ; FF  08AE
-        mov R7, A                           ; FF  08AF
-        mov R7, A                           ; FF  08B0
-        mov R7, A                           ; FF  08B1
-        mov R7, A                           ; FF  08B2
-        mov R7, A                           ; FF  08B3
-        mov R7, A                           ; FF  08B4
-        mov R7, A                           ; FF  08B5
-        mov R7, A                           ; FF  08B6
-        mov R7, A                           ; FF  08B7
-        mov R7, A                           ; FF  08B8
-        mov R7, A                           ; FF  08B9
-        mov R7, A                           ; FF  08BA
-        mov R7, A                           ; FF  08BB
-        mov R7, A                           ; FF  08BC
-        mov R7, A                           ; FF  08BD
-        mov R7, A                           ; FF  08BE
-        mov R7, A                           ; FF  08BF
-        mov R7, A                           ; FF  08C0
-        mov R7, A                           ; FF  08C1
-        mov R7, A                           ; FF  08C2
-        mov R7, A                           ; FF  08C3
-        mov R7, A                           ; FF  08C4
-        mov R7, A                           ; FF  08C5
-        mov R7, A                           ; FF  08C6
-        mov R7, A                           ; FF  08C7
-        mov R7, A                           ; FF  08C8
-        mov R7, A                           ; FF  08C9
-        mov R7, A                           ; FF  08CA
-        mov R7, A                           ; FF  08CB
-        mov R7, A                           ; FF  08CC
-        mov R7, A                           ; FF  08CD
-        mov R7, A                           ; FF  08CE
-        mov R7, A                           ; FF  08CF
-        mov R7, A                           ; FF  08D0
-        mov R7, A                           ; FF  08D1
-        mov R7, A                           ; FF  08D2
-        mov R7, A                           ; FF  08D3
-        mov R7, A                           ; FF  08D4
-        mov R7, A                           ; FF  08D5
-        mov R7, A                           ; FF  08D6
-        mov R7, A                           ; FF  08D7
-        mov R7, A                           ; FF  08D8
-        mov R7, A                           ; FF  08D9
-        mov R7, A                           ; FF  08DA
-        mov R7, A                           ; FF  08DB
-        mov R7, A                           ; FF  08DC
-        mov R7, A                           ; FF  08DD
-        mov R7, A                           ; FF  08DE
-        mov R7, A                           ; FF  08DF
-        mov R7, A                           ; FF  08E0
-        mov R7, A                           ; FF  08E1
-        mov R7, A                           ; FF  08E2
-        mov R7, A                           ; FF  08E3
-        mov R7, A                           ; FF  08E4
-        mov R7, A                           ; FF  08E5
-        mov R7, A                           ; FF  08E6
-        mov R7, A                           ; FF  08E7
-        mov R7, A                           ; FF  08E8
-        mov R7, A                           ; FF  08E9
-        mov R7, A                           ; FF  08EA
-        mov R7, A                           ; FF  08EB
-        mov R7, A                           ; FF  08EC
-        mov R7, A                           ; FF  08ED
-        mov R7, A                           ; FF  08EE
-        mov R7, A                           ; FF  08EF
-        mov R7, A                           ; FF  08F0
-        mov R7, A                           ; FF  08F1
-        mov R7, A                           ; FF  08F2
-        mov R7, A                           ; FF  08F3
-        mov R7, A                           ; FF  08F4
-        mov R7, A                           ; FF  08F5
-        mov R7, A                           ; FF  08F6
-        mov R7, A                           ; FF  08F7
-        mov R7, A                           ; FF  08F8
-        mov R7, A                           ; FF  08F9
-        mov R7, A                           ; FF  08FA
-        mov R7, A                           ; FF  08FB
-        mov R7, A                           ; FF  08FC
-        mov R7, A                           ; FF  08FD
-        mov R7, A                           ; FF  08FE
-        mov R7, A                           ; FF  08FF
+; --- 0x089B..0x08FF : 0xFF-count 101 0xFF EPROM padding (objcopy gap-fill) ---
+;
+;==============================================================================
+; motion_exec (0x0900) — main-loop gate: advances motion, on step completion
+;   (or TIM/IF wait) fetches the next instruction via prog_exec.
+;==============================================================================
+        .org    0x0900
         jb 0x44, L_0906                     ; 20 44 03  0900
         jnb 0x43, L_0940                    ; 30 43 3A  0903
 L_0906:
-        mov 0x83, #0x51                     ; 75 83 51  0906
+        mov SFR_DPH, #0x51                     ; 75 83 51  0906
         mov A, 0x1F                         ; E5 1F  0909
         movx @DPTR, A                       ; F0  090B
         mov A, 0x26                         ; E5 26  090C
@@ -397,16 +308,22 @@ L_093B:
         clr 0x44                            ; C2 44  093E
 L_0940:
         ret                                 ; 22  0940
+;
+;==============================================================================
+; prog_exec (0x0941) — instruction executor: fetches opcode from SRAM into 0x27,
+;   decodes with the SAME bit fields as the RS-232 dispatch, most instructions
+;   occupy an 8-byte slot (PC += 8).
+;==============================================================================
 L_0941:
         clr 0x44                            ; C2 44  0941
-        mov 0x82, 0x66                      ; 85 66 82  0943
-        mov 0x83, 0x67                      ; 85 67 83  0946
+        mov SFR_DPL, 0x66                      ; 85 66 82  0943
+        mov SFR_DPH, 0x67                      ; 85 67 83  0946
         movx A, @DPTR                       ; E0  0949
         mov R0, A                           ; F8  094A
         mov 0x27, A                         ; F5 27  094B
 L_094D:
         jnb 0xE7, L_0954                    ; 30 E7 04  094D
-        anl 0x28, #0x03                     ; 53 28 03  0950
+        anl STATE_FLAGS, #0x03                     ; 53 28 03  0950
         ret                                 ; 22  0953
 L_0954:
         jnb 0xE6, 0x09A9                    ; 30 E6 52  0954
@@ -457,12 +374,10 @@ L_0993:
         mov A, R7                           ; EF  0997
         sjmp L_0A03                         ; 80 69  0998
 L_099A:
-        anl 0x28, #0x07                     ; 53 28 07  099A
+        anl STATE_FLAGS, #0x07                     ; 53 28 07  099A
         sjmp L_0A01                         ; 80 62  099D
-        mov R7, A                           ; FF  099F
-        mov R7, A                           ; FF  09A0
-        mov R7, A                           ; FF  09A1
-        mov R7, A                           ; FF  09A2
+; --- 0x099F..0x09A2 : 0xFF-count 4 0xFF EPROM padding (objcopy gap-fill) ---
+        .org    0x09A3
         ajmp 0x0802                         ; 01 02  09A3
         inc A                               ; 04  09A5
         inc R0                              ; 08  09A6
@@ -555,12 +470,16 @@ L_0A23:
         sjmp L_0A01                         ; 80 CF  0A30
 L_0A32:
         movx @DPTR, A                       ; F0  0A32
+;
+;==============================================================================
+; prog_goto (0x0A33) — label->PC resolver: RL A x2 into the page-0x80 table.
+;==============================================================================
 L_0A33:
         mov A, R0                           ; E8  0A33
 L_0A34:
         rl A                                ; 23  0A34
-        mov 0x82, A                         ; F5 82  0A35
-        mov 0x83, 0x3E                      ; 85 3E 83  0A37
+        mov SFR_DPL, A                         ; F5 82  0A35
+        mov SFR_DPH, PROG_PAGE                      ; 85 3E 83  0A37
         movx A, @DPTR                       ; E0  0A3A
         mov 0x66, A                         ; F5 66  0A3B
         inc DPTR                            ; A3  0A3D
